@@ -251,10 +251,10 @@ fmtFieldAccessor thisMod typeName variantName Field{..} = vcat
                 [ typeAnnotation (WordType ty)
                 , getDef $ fmtGetWordField "struct" loc
                 ]
-            PtrField idx ty -> vcat
-                [ typeAnnotation (PtrType ty)
+            PtrField{offset,type_} -> vcat
+                [ typeAnnotation (PtrType type_)
                 , getDef $ PP.line <> indent (vcat
-                    [ hcat [ "U'.getPtr ", fromString (show idx), " struct" ]
+                    [ hcat [ "U'.getPtr ", fromString (show offset), " struct" ]
                     , hcat [ ">>= C'.fromPtr (U'.message struct)" ]
                     ])
                 ]
@@ -274,8 +274,8 @@ fmtFieldAccessor thisMod typeName variantName Field{..} = vcat
             [ hasName, "(", dataCon, " struct) = ", case fieldLocType of
                 DataField DataLoc{dataIdx} _ ->
                     "pure $ " <> fromString (show dataIdx) <> " < U'.length (U'.dataSection struct)"
-                PtrField idx _ ->
-                    "Data.Maybe.isJust <$> U'.getPtr " <> fromString (show idx) <> " struct"
+                PtrField{offset} ->
+                    "Data.Maybe.isJust <$> U'.getPtr " <> fromString (show offset) <> " struct"
                 HereField _ -> "pure True"
                 VoidField -> "pure True"
             ]
@@ -299,11 +299,11 @@ fmtFieldAccessor thisMod typeName variantName Field{..} = vcat
                 [ typeAnnotation VoidType
                 , setName <> " _ = pure ()"
                 ]
-            PtrField idx ty -> vcat
-                [ typeAnnotation (PtrType ty)
+            PtrField{offset,type_} -> vcat
+                [ typeAnnotation (PtrType type_)
                 , hcat
                     [ setName, " (", dataCon, " struct) value = "
-                    , "U'.setPtr (C'.toPtr value) ", fromString (show idx), " struct"
+                    , "U'.setPtr (C'.toPtr value) ", fromString (show offset), " struct"
                     ]
                 ]
             HereField _ ->
@@ -323,14 +323,14 @@ fmtFieldAccessor thisMod typeName variantName Field{..} = vcat
 -- * @fieldLocType@: the field location and type.
 fmtNew thisMod accessorName typeCon fieldLocType =
     case fieldLocType of
-        PtrField _ fieldType ->
+        PtrField{type_} ->
             let newType = hcat
                     [ typeCon
                     , " (M'.MutMsg s) -> m ("
-                    , fmtType thisMod "(M'.MutMsg s)" (PtrType fieldType)
+                    , fmtType thisMod "(M'.MutMsg s)" (PtrType type_)
                     , ")"
                     ]
-            in case fieldType of
+            in case type_ of
                 ListOf _ ->
                     fmtNewListLike newType "C'.newList"
                 PrimPtr PrimText ->
@@ -426,15 +426,15 @@ fmtUnionSetter thisMod parentType tagLoc variant =
                         loc
                 ]
             ]
-        Just (Unnamed _ fieldLocType@(PtrField index typ)) -> vcat
+        Just (Unnamed _ fieldLocType@PtrField{offset,type_}) -> vcat
             [ hcat
                 [ setName, " :: U'.RWCtx m s => ", parentTypeCon, " (M'.MutMsg s) -> "
-                , fmtType thisMod "(M'.MutMsg s)" (PtrType typ), " -> m ()"
+                , fmtType thisMod "(M'.MutMsg s)" (PtrType type_), " -> m ()"
                 ]
             , hcat [ setName, "(", parentDataCon, " struct) value = do" ]
             , indent $ vcat
                 [ fmtSetTag
-                , hcat [ "U'.setPtr (C'.toPtr value) ", fromString (show index), " struct" ]
+                , hcat [ "U'.setPtr (C'.toPtr value) ", fromString (show offset), " struct" ]
                 ]
 
             -- Also generate a new_* function.
@@ -562,9 +562,9 @@ fmtDataDef thisMod dataName DefUnion{dataVariants,dataTagLoc,parentStruct=Struct
                     "pure " <> nameText
                 Unnamed _ (DataField loc _) ->
                     nameText <> " <$> " <> fmtGetWordField "struct" loc
-                Unnamed _ (PtrField idx _) -> hcat
+                Unnamed _ PtrField{offset} -> hcat
                     [ nameText," <$> "
-                    , " (U'.getPtr ", fromString (show idx), " struct"
+                    , " (U'.getPtr ", fromString (show offset), " struct"
                     , " >>= C'.fromPtr (U'.message struct))"
                     ]
             ]

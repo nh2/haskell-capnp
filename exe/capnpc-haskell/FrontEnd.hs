@@ -279,11 +279,7 @@ generateDecls thisModule nodeMap meta@NodeMetaData{..} =
             [ ( name
               , IR.DeclConst IR.PtrConst
                 { ptrType = IR.PrimPtr IR.PrimText
-                , ptrValue = Just $ Untyped.PtrList $ Untyped.List8 $
-                    encodeUtf8 v
-                    & BS.unpack
-                    & (++ [0])
-                    & V.fromList
+                , ptrValue = textPtr v
                 }
               )
             ]
@@ -291,9 +287,7 @@ generateDecls thisModule nodeMap meta@NodeMetaData{..} =
             [ ( name
               , IR.DeclConst IR.PtrConst
                 { ptrType = IR.PrimPtr IR.PrimData
-                , ptrValue = Just $ Untyped.PtrList $ Untyped.List8 $
-                    BS.unpack v
-                    & V.fromList
+                , ptrValue = dataPtr v
                 }
               )
             ]
@@ -450,26 +444,51 @@ getFieldLoc thisModule nodeMap = \case
         case formatType thisModule nodeMap type_ of
             IR.VoidType ->
                 IR.VoidField
-            IR.PtrType ty
-                | hadExplicitDefault -> error $
-                    "Error: capnpc-haskell does not support explicit default " ++
-                    "field values for pointer types. See:\n" ++
-                    "\n" ++
-                    "    https://github.com/zenhack/haskell-capnp/issues/28"
-                | otherwise ->
-                    IR.PtrField (fromIntegral offset) ty
+            IR.PtrType ty -> IR.PtrField
+                { offset = fromIntegral offset
+                , type_ = ty
+                , value = case defaultValue of
+                    Value'text text      -> textPtr text
+                    Value'data_ data_    -> dataPtr data_
+                    Value'list ptr       -> ptr
+                    Value'struct ptr     -> ptr
+                    Value'interface      -> Nothing
+                    Value'anyPointer ptr -> ptr
+                    _ -> error $
+                        "Pointer field had non-pointer default value: " ++
+                        show defaultValue
+                }
             IR.WordType ty ->
                 IR.DataField
                     (dataLoc offset ty defaultValue)
                     ty
             IR.CompositeType ty ->
-                IR.PtrField (fromIntegral offset) (IR.PtrComposite ty)
+                IR.PtrField
+                    { offset = fromIntegral offset
+                    , type_ = (IR.PtrComposite ty)
+                    , value = case defaultValue of
+                        Value'struct ptr -> ptr
+                        _ -> error $
+                            "Composite field had non-struct default value: " ++
+                            show defaultValue
+                    }
     Field'group{..} ->
         IR.HereField $ IR.StructType (identifierFromMetaData thisModule (nodeMap M.! typeId)) []
     Field'unknown' _ ->
         -- Don't know how to interpret this; we'll have to leave the argument
         -- opaque.
         IR.VoidField
+
+textPtr :: T.Text -> Maybe Untyped.PtrType
+textPtr v = Just $ Untyped.PtrList $ Untyped.List8 $
+    encodeUtf8 v
+    & BS.unpack
+    & (++ [0])
+    & V.fromList
+dataPtr :: BS.ByteString -> Maybe Untyped.PtrType
+dataPtr v = Just $ Untyped.PtrList $ Untyped.List8 $
+    BS.unpack v
+    & V.fromList
 
 -- | Return the raw bit-level representation of a value that is stored
 -- in a struct's data section.

@@ -242,7 +242,11 @@ data FieldLocType
     = DataField DataLoc WordType
     -- | The field is in the struct's pointer section (the argument is the
     -- index).
-    | PtrField !Word16 PtrType
+    | PtrField
+        { offset :: !Word16
+        , type_  :: PtrType
+        , value  :: Maybe Untyped.PtrType
+        }
     -- | The field is a group or union; it's "location" is the whole struct.
     | HereField CompositeType
     -- | The field is of type void (and thus is zero-size).

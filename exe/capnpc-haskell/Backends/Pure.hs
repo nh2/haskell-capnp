@@ -187,10 +187,10 @@ fmtField thisMod Field{fieldName,fieldLocType} =
     PP.textStrict fieldName <> " :: " <> fmtType thisMod fieldType
   where
     fieldType = case fieldLocType of
-        VoidField      -> VoidType
-        DataField _ ty -> WordType ty
-        PtrField _ ty  -> PtrType ty
-        HereField ty   -> CompositeType ty
+        VoidField       -> VoidType
+        DataField _ ty  -> WordType ty
+        PtrField{type_} -> PtrType type_
+        HereField ty    -> CompositeType ty
 
 fmtDecl :: Id -> (Name, Decl) -> PP.Doc
 fmtDecl thisMod (name, DeclDef d)   = fmtDataDef thisMod name d
@@ -385,7 +385,7 @@ fmtDataDef thisMod dataName dataDef =
                 [ hcat [ "field_ <- ", getterName, " raw" ]
                 , hcat [ "C'.marshalInto field_ ", fieldNameText ]
                 ]
-            PtrField _ ty -> case ty of
+            PtrField{type_} -> case type_ of
                 PrimPtr PrimData -> vcat
                     [ hcat [ "field_ <- ", newName, " (BS.length ", fieldNameText, ") raw" ]
                     , hcat [ "C'.marshalInto field_ ", fieldNameText ]
