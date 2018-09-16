@@ -465,7 +465,7 @@ getFieldLoc thisModule nodeMap = \case
             IR.CompositeType ty ->
                 IR.PtrField
                     { offset = fromIntegral offset
-                    , type_ = (IR.PtrComposite ty)
+                    , type_ = IR.PtrComposite ty
                     , value = case defaultValue of
                         Value'struct ptr -> ptr
                         _ -> error $
