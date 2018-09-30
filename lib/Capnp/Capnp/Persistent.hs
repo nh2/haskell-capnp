@@ -58,10 +58,12 @@ get_Persistent'SaveParams'sealFor :: U'.ReadCtx m msg => Persistent'SaveParams m
 get_Persistent'SaveParams'sealFor (Persistent'SaveParams_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
-instance U'.ReadCtx m msg => IsLabel "sealFor"(H'.Get (Persistent'SaveParams msg -> m (Maybe (U'.Ptr msg)))) where
+instance U'.ReadCtx m msg => IsLabel "sealFor" (H'.Get (Persistent'SaveParams msg -> m (Maybe (U'.Ptr msg)))) where
     fromLabel = H'.Get $ get_Persistent'SaveParams'sealFor
 has_Persistent'SaveParams'sealFor :: U'.ReadCtx m msg => Persistent'SaveParams msg -> m Bool
 has_Persistent'SaveParams'sealFor(Persistent'SaveParams_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
+instance U'.ReadCtx m msg => IsLabel "sealFor" (H'.Has (Persistent'SaveParams msg -> m Bool)) where
+    fromLabel = H'.Has $ has_Persistent'SaveParams'sealFor
 set_Persistent'SaveParams'sealFor :: U'.RWCtx m s => Persistent'SaveParams (M'.MutMsg s) -> (Maybe (U'.Ptr (M'.MutMsg s))) -> m ()
 set_Persistent'SaveParams'sealFor (Persistent'SaveParams_newtype_ struct) value = U'.setPtr (C'.toPtr value) 0 struct
 newtype Persistent'SaveResults msg = Persistent'SaveResults_newtype_ (U'.Struct msg)
@@ -93,9 +95,11 @@ get_Persistent'SaveResults'sturdyRef :: U'.ReadCtx m msg => Persistent'SaveResul
 get_Persistent'SaveResults'sturdyRef (Persistent'SaveResults_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
-instance U'.ReadCtx m msg => IsLabel "sturdyRef"(H'.Get (Persistent'SaveResults msg -> m (Maybe (U'.Ptr msg)))) where
+instance U'.ReadCtx m msg => IsLabel "sturdyRef" (H'.Get (Persistent'SaveResults msg -> m (Maybe (U'.Ptr msg)))) where
     fromLabel = H'.Get $ get_Persistent'SaveResults'sturdyRef
 has_Persistent'SaveResults'sturdyRef :: U'.ReadCtx m msg => Persistent'SaveResults msg -> m Bool
 has_Persistent'SaveResults'sturdyRef(Persistent'SaveResults_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
+instance U'.ReadCtx m msg => IsLabel "sturdyRef" (H'.Has (Persistent'SaveResults msg -> m Bool)) where
+    fromLabel = H'.Has $ has_Persistent'SaveResults'sturdyRef
 set_Persistent'SaveResults'sturdyRef :: U'.RWCtx m s => Persistent'SaveResults (M'.MutMsg s) -> (Maybe (U'.Ptr (M'.MutMsg s))) -> m ()
 set_Persistent'SaveResults'sturdyRef (Persistent'SaveResults_newtype_ struct) value = U'.setPtr (C'.toPtr value) 0 struct

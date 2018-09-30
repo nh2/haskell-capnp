@@ -250,7 +250,7 @@ fmtFieldAccessor thisMod typeName variantName Field{..} = vcat
             fmtIsLabel fieldType =
                 instance_
                     [ "U'.ReadCtx m msg" ]
-                    (hcat [ "IsLabel ", fromString (show fieldName), "(H'.Get (", getType fieldType, "))" ])
+                    (hcat [ "IsLabel ", fromString (show fieldName), " (H'.Get (", getType fieldType, "))" ])
                     [ hcat [ "fromLabel = H'.Get $ ", getName ] ]
         in case fieldLocType of
             DataField loc ty -> vcat
@@ -286,6 +286,9 @@ fmtFieldAccessor thisMod typeName variantName Field{..} = vcat
                     , fromString (show idx)
                     , " struct"
                     ]
+                , instance_ [ "U'.ReadCtx m msg" ]
+                    (hcat [ "IsLabel ", fromString (show fieldName), " (H'.Has (", typeCon, " msg -> m Bool))" ])
+                    [ hcat [ "fromLabel = H'.Has $ ", hasName ] ]
                 ]
             _ ->
                 ""
