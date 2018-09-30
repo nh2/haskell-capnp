@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DataKinds #-}
 {- |
 Module: Capnp.Capnp.Cxx
 Description: Low-level generated module for capnp/c++.capnp
@@ -16,6 +17,7 @@ module Capnp.Capnp.Cxx where
 import Data.Int
 import Data.Word
 import GHC.Generics (Generic)
+import GHC.OverloadedLabels (IsLabel(..))
 import Data.Capnp.Bits (Word1)
 import qualified Data.Bits
 import qualified Data.Maybe

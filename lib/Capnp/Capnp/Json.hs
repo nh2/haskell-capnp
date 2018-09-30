@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DataKinds #-}
 {- |
 Module: Capnp.Capnp.Json
 Description: Low-level generated module for capnp/json.capnp
@@ -16,6 +17,7 @@ module Capnp.Capnp.Json where
 import Data.Int
 import Data.Word
 import GHC.Generics (Generic)
+import GHC.OverloadedLabels (IsLabel(..))
 import Data.Capnp.Bits (Word1)
 import qualified Data.Bits
 import qualified Data.Maybe
@@ -63,6 +65,8 @@ data JsonValue' msg
     | JsonValue'unknown' Word16
 get_JsonValue' :: U'.ReadCtx m msg => JsonValue msg -> m (JsonValue' msg)
 get_JsonValue' (JsonValue_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel ""(H'.Get (JsonValue msg -> m (JsonValue' msg))) where
+    fromLabel = H'.Get $ get_JsonValue'
 set_JsonValue'null :: U'.RWCtx m s => JsonValue (M'.MutMsg s) -> m ()
 set_JsonValue'null (JsonValue_newtype_ struct) = H'.setWordField struct (0 :: Word16) 0 0 0
 set_JsonValue'boolean :: U'.RWCtx m s => JsonValue (M'.MutMsg s) -> Bool -> m ()
@@ -152,6 +156,8 @@ get_JsonValue'Call'function :: U'.ReadCtx m msg => JsonValue'Call msg -> m (B'.T
 get_JsonValue'Call'function (JsonValue'Call_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "function"(H'.Get (JsonValue'Call msg -> m (B'.Text msg))) where
+    fromLabel = H'.Get $ get_JsonValue'Call'function
 has_JsonValue'Call'function :: U'.ReadCtx m msg => JsonValue'Call msg -> m Bool
 has_JsonValue'Call'function(JsonValue'Call_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_JsonValue'Call'function :: U'.RWCtx m s => JsonValue'Call (M'.MutMsg s) -> (B'.Text (M'.MutMsg s)) -> m ()
@@ -165,6 +171,8 @@ get_JsonValue'Call'params :: U'.ReadCtx m msg => JsonValue'Call msg -> m (B'.Lis
 get_JsonValue'Call'params (JsonValue'Call_newtype_ struct) =
     U'.getPtr 1 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "params"(H'.Get (JsonValue'Call msg -> m (B'.List msg (JsonValue msg)))) where
+    fromLabel = H'.Get $ get_JsonValue'Call'params
 has_JsonValue'Call'params :: U'.ReadCtx m msg => JsonValue'Call msg -> m Bool
 has_JsonValue'Call'params(JsonValue'Call_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 1 struct
 set_JsonValue'Call'params :: U'.RWCtx m s => JsonValue'Call (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (JsonValue (M'.MutMsg s))) -> m ()
@@ -203,6 +211,8 @@ get_JsonValue'Field'name :: U'.ReadCtx m msg => JsonValue'Field msg -> m (B'.Tex
 get_JsonValue'Field'name (JsonValue'Field_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "name"(H'.Get (JsonValue'Field msg -> m (B'.Text msg))) where
+    fromLabel = H'.Get $ get_JsonValue'Field'name
 has_JsonValue'Field'name :: U'.ReadCtx m msg => JsonValue'Field msg -> m Bool
 has_JsonValue'Field'name(JsonValue'Field_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_JsonValue'Field'name :: U'.RWCtx m s => JsonValue'Field (M'.MutMsg s) -> (B'.Text (M'.MutMsg s)) -> m ()
@@ -216,6 +226,8 @@ get_JsonValue'Field'value :: U'.ReadCtx m msg => JsonValue'Field msg -> m (JsonV
 get_JsonValue'Field'value (JsonValue'Field_newtype_ struct) =
     U'.getPtr 1 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "value"(H'.Get (JsonValue'Field msg -> m (JsonValue msg))) where
+    fromLabel = H'.Get $ get_JsonValue'Field'value
 has_JsonValue'Field'value :: U'.ReadCtx m msg => JsonValue'Field msg -> m Bool
 has_JsonValue'Field'value(JsonValue'Field_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 1 struct
 set_JsonValue'Field'value :: U'.RWCtx m s => JsonValue'Field (M'.MutMsg s) -> (JsonValue (M'.MutMsg s)) -> m ()

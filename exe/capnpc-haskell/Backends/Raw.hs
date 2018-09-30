@@ -64,6 +64,7 @@ fmtModule thisMod@Module{modName=Namespace modNameParts,..} =
     , "{-# LANGUAGE MultiParamTypeClasses #-}"
     , "{-# LANGUAGE TypeFamilies #-}"
     , "{-# LANGUAGE DeriveGeneric #-}"
+    , "{-# LANGUAGE DataKinds #-}"
     , "{- |"
     , "Module: " <> humanMod
     , "Description: Low-level generated module for " <> modFileText
@@ -80,6 +81,7 @@ fmtModule thisMod@Module{modName=Namespace modNameParts,..} =
     , "import Data.Word"
     , ""
     , "import GHC.Generics (Generic)"
+    , "import GHC.OverloadedLabels (IsLabel(..))"
     , ""
     , "import Data.Capnp.Bits (Word1)"
     , ""
@@ -245,10 +247,16 @@ fmtFieldAccessor thisMod typeName variantName Field{..} = vcat
             typeAnnotation fieldType =
                 hcat [ getName, " :: U'.ReadCtx m msg => ", getType fieldType ]
             getDef def = hcat [ getName, " (", dataCon, " struct) =", def ]
+            fmtIsLabel fieldType =
+                instance_
+                    [ "U'.ReadCtx m msg" ]
+                    (hcat [ "IsLabel ", fromString (show fieldName), "(H'.Get (", getType fieldType, "))" ])
+                    [ hcat [ "fromLabel = H'.Get $ ", getName ] ]
         in case fieldLocType of
             DataField loc ty -> vcat
                 [ typeAnnotation (WordType ty)
                 , getDef $ fmtGetWordField "struct" loc
+                , fmtIsLabel (WordType ty)
                 ]
             PtrField idx ty -> vcat
                 [ typeAnnotation (PtrType ty)
@@ -256,14 +264,17 @@ fmtFieldAccessor thisMod typeName variantName Field{..} = vcat
                     [ hcat [ "U'.getPtr ", fromString (show idx), " struct" ]
                     , hcat [ ">>= C'.fromPtr (U'.message struct)" ]
                     ])
+                , fmtIsLabel (PtrType ty)
                 ]
             HereField ty -> vcat
                 [ typeAnnotation (CompositeType ty)
                 , getDef " C'.fromStruct struct"
+                , fmtIsLabel (CompositeType ty)
                 ]
             VoidField -> vcat
                 [ typeAnnotation VoidType
                 , getDef " Data.Capnp.TraversalLimit.invoice 1 >> pure ()"
+                , fmtIsLabel VoidType
                 ]
     fmtHas =
         case fieldLocType of

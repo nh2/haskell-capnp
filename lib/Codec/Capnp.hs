@@ -5,6 +5,9 @@ module Codec.Capnp
     ( newRoot
     , setRoot
     , getRoot
+    , Get(..)
+    , Set(..)
+    , Has(..)
     ) where
 
 import Data.Capnp.Classes
@@ -28,3 +31,7 @@ setRoot = U.setRoot . toStruct
 -- | 'getRoot' returns the root object of a message.
 getRoot :: (FromStruct msg a, U.ReadCtx m msg) => msg -> m a
 getRoot msg = U.rootPtr msg >>= fromStruct
+
+newtype Get a = Get { get :: a }
+newtype Set a = Set { set :: a }
+newtype Has a = Has { has :: a }

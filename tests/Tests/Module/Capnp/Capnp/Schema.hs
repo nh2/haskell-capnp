@@ -1,14 +1,16 @@
-{-# LANGUAGE QuasiQuotes     #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE QuasiQuotes      #-}
+{-# LANGUAGE RecordWildCards  #-}
 module Tests.Module.Capnp.Capnp.Schema (schemaTests) where
 
 import Control.Monad           (when)
 import Control.Monad.Primitive (RealWorld)
+import Data.Function           ((&))
 import Text.Heredoc            (there)
 
 import Capnp.Capnp.Schema
 
-import Data.Capnp                (newRoot)
+import Data.Capnp                (get, newRoot)
 import Data.Capnp.TraversalLimit (LimitT, evalLimitT)
 import Data.Mutable              (Thaw(..))
 import Tests.Util                (assertionsToTest, decodeValue)
@@ -34,10 +36,10 @@ schemaTests = assertionsToTest "Test typed setters" $ map testCase
             field <- newRoot msg
             set_Field'codeOrder field 4
             set_Field'discriminantValue field 6
-            union <- get_Field'union' field
+            union <- field & get #union'
             group <- set_Field'group union
             set_Field'group'typeId group 322
-            ordinal <- get_Field'ordinal field
+            ordinal <- field & get #ordinal
             set_Field'ordinal'explicit ordinal 22
         }
     ]

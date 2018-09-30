@@ -11,7 +11,14 @@ defines helpers used by high-level api.
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies     #-}
 {-# OPTIONS_HADDOCK hide      #-}
-module Data.Capnp.GenHelpers where
+module Data.Capnp.GenHelpers
+    ( getWordField
+    , setWordField
+    , getPtrConst
+    , Codec.Get(..)
+    , Codec.Set(..)
+    , Codec.Has(..)
+    ) where
 
 import Data.Bits
 import Data.Word
@@ -24,6 +31,7 @@ import Data.Capnp.Bits
 
 import Data.Capnp (bsToMsg, evalLimitT)
 
+import qualified Codec.Capnp        as Codec
 import qualified Data.Capnp.Classes as C
 import qualified Data.Capnp.Message as M
 import qualified Data.Capnp.Untyped as U

@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DataKinds #-}
 {- |
 Module: Capnp.Capnp.Schema
 Description: Low-level generated module for capnp/schema.capnp
@@ -16,6 +17,7 @@ module Capnp.Capnp.Schema where
 import Data.Int
 import Data.Word
 import GHC.Generics (Generic)
+import GHC.OverloadedLabels (IsLabel(..))
 import Data.Capnp.Bits (Word1)
 import qualified Data.Bits
 import qualified Data.Maybe
@@ -54,12 +56,16 @@ instance C'.IsPtr msg (B'.List msg (Annotation msg)) where
     toPtr (List_Annotation l) = C'.toPtr l
 get_Annotation'id :: U'.ReadCtx m msg => Annotation msg -> m Word64
 get_Annotation'id (Annotation_newtype_ struct) = H'.getWordField struct 0 0 0
+instance U'.ReadCtx m msg => IsLabel "id"(H'.Get (Annotation msg -> m Word64)) where
+    fromLabel = H'.Get $ get_Annotation'id
 set_Annotation'id :: U'.RWCtx m s => Annotation (M'.MutMsg s) -> Word64 -> m ()
 set_Annotation'id (Annotation_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 0 0 0
 get_Annotation'value :: U'.ReadCtx m msg => Annotation msg -> m (Value msg)
 get_Annotation'value (Annotation_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "value"(H'.Get (Annotation msg -> m (Value msg))) where
+    fromLabel = H'.Get $ get_Annotation'value
 has_Annotation'value :: U'.ReadCtx m msg => Annotation msg -> m Bool
 has_Annotation'value(Annotation_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_Annotation'value :: U'.RWCtx m s => Annotation (M'.MutMsg s) -> (Value (M'.MutMsg s)) -> m ()
@@ -73,6 +79,8 @@ get_Annotation'brand :: U'.ReadCtx m msg => Annotation msg -> m (Brand msg)
 get_Annotation'brand (Annotation_newtype_ struct) =
     U'.getPtr 1 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "brand"(H'.Get (Annotation msg -> m (Brand msg))) where
+    fromLabel = H'.Get $ get_Annotation'brand
 has_Annotation'brand :: U'.ReadCtx m msg => Annotation msg -> m Bool
 has_Annotation'brand(Annotation_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 1 struct
 set_Annotation'brand :: U'.RWCtx m s => Annotation (M'.MutMsg s) -> (Brand (M'.MutMsg s)) -> m ()
@@ -111,6 +119,8 @@ get_Brand'scopes :: U'.ReadCtx m msg => Brand msg -> m (B'.List msg (Brand'Scope
 get_Brand'scopes (Brand_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "scopes"(H'.Get (Brand msg -> m (B'.List msg (Brand'Scope msg)))) where
+    fromLabel = H'.Get $ get_Brand'scopes
 has_Brand'scopes :: U'.ReadCtx m msg => Brand msg -> m Bool
 has_Brand'scopes(Brand_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_Brand'scopes :: U'.RWCtx m s => Brand (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (Brand'Scope (M'.MutMsg s))) -> m ()
@@ -147,14 +157,20 @@ instance C'.IsPtr msg (B'.List msg (CapnpVersion msg)) where
     toPtr (List_CapnpVersion l) = C'.toPtr l
 get_CapnpVersion'major :: U'.ReadCtx m msg => CapnpVersion msg -> m Word16
 get_CapnpVersion'major (CapnpVersion_newtype_ struct) = H'.getWordField struct 0 0 0
+instance U'.ReadCtx m msg => IsLabel "major"(H'.Get (CapnpVersion msg -> m Word16)) where
+    fromLabel = H'.Get $ get_CapnpVersion'major
 set_CapnpVersion'major :: U'.RWCtx m s => CapnpVersion (M'.MutMsg s) -> Word16 -> m ()
 set_CapnpVersion'major (CapnpVersion_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word16) 0 0 0
 get_CapnpVersion'minor :: U'.ReadCtx m msg => CapnpVersion msg -> m Word8
 get_CapnpVersion'minor (CapnpVersion_newtype_ struct) = H'.getWordField struct 0 16 0
+instance U'.ReadCtx m msg => IsLabel "minor"(H'.Get (CapnpVersion msg -> m Word8)) where
+    fromLabel = H'.Get $ get_CapnpVersion'minor
 set_CapnpVersion'minor :: U'.RWCtx m s => CapnpVersion (M'.MutMsg s) -> Word8 -> m ()
 set_CapnpVersion'minor (CapnpVersion_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word8) 0 16 0
 get_CapnpVersion'micro :: U'.ReadCtx m msg => CapnpVersion msg -> m Word8
 get_CapnpVersion'micro (CapnpVersion_newtype_ struct) = H'.getWordField struct 0 24 0
+instance U'.ReadCtx m msg => IsLabel "micro"(H'.Get (CapnpVersion msg -> m Word8)) where
+    fromLabel = H'.Get $ get_CapnpVersion'micro
 set_CapnpVersion'micro :: U'.RWCtx m s => CapnpVersion (M'.MutMsg s) -> Word8 -> m ()
 set_CapnpVersion'micro (CapnpVersion_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word8) 0 24 0
 newtype CodeGeneratorRequest msg = CodeGeneratorRequest_newtype_ (U'.Struct msg)
@@ -186,6 +202,8 @@ get_CodeGeneratorRequest'nodes :: U'.ReadCtx m msg => CodeGeneratorRequest msg -
 get_CodeGeneratorRequest'nodes (CodeGeneratorRequest_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "nodes"(H'.Get (CodeGeneratorRequest msg -> m (B'.List msg (Node msg)))) where
+    fromLabel = H'.Get $ get_CodeGeneratorRequest'nodes
 has_CodeGeneratorRequest'nodes :: U'.ReadCtx m msg => CodeGeneratorRequest msg -> m Bool
 has_CodeGeneratorRequest'nodes(CodeGeneratorRequest_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_CodeGeneratorRequest'nodes :: U'.RWCtx m s => CodeGeneratorRequest (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (Node (M'.MutMsg s))) -> m ()
@@ -199,6 +217,8 @@ get_CodeGeneratorRequest'requestedFiles :: U'.ReadCtx m msg => CodeGeneratorRequ
 get_CodeGeneratorRequest'requestedFiles (CodeGeneratorRequest_newtype_ struct) =
     U'.getPtr 1 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "requestedFiles"(H'.Get (CodeGeneratorRequest msg -> m (B'.List msg (CodeGeneratorRequest'RequestedFile msg)))) where
+    fromLabel = H'.Get $ get_CodeGeneratorRequest'requestedFiles
 has_CodeGeneratorRequest'requestedFiles :: U'.ReadCtx m msg => CodeGeneratorRequest msg -> m Bool
 has_CodeGeneratorRequest'requestedFiles(CodeGeneratorRequest_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 1 struct
 set_CodeGeneratorRequest'requestedFiles :: U'.RWCtx m s => CodeGeneratorRequest (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (CodeGeneratorRequest'RequestedFile (M'.MutMsg s))) -> m ()
@@ -212,6 +232,8 @@ get_CodeGeneratorRequest'capnpVersion :: U'.ReadCtx m msg => CodeGeneratorReques
 get_CodeGeneratorRequest'capnpVersion (CodeGeneratorRequest_newtype_ struct) =
     U'.getPtr 2 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "capnpVersion"(H'.Get (CodeGeneratorRequest msg -> m (CapnpVersion msg))) where
+    fromLabel = H'.Get $ get_CodeGeneratorRequest'capnpVersion
 has_CodeGeneratorRequest'capnpVersion :: U'.ReadCtx m msg => CodeGeneratorRequest msg -> m Bool
 has_CodeGeneratorRequest'capnpVersion(CodeGeneratorRequest_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 2 struct
 set_CodeGeneratorRequest'capnpVersion :: U'.RWCtx m s => CodeGeneratorRequest (M'.MutMsg s) -> (CapnpVersion (M'.MutMsg s)) -> m ()
@@ -294,6 +316,8 @@ get_Enumerant'name :: U'.ReadCtx m msg => Enumerant msg -> m (B'.Text msg)
 get_Enumerant'name (Enumerant_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "name"(H'.Get (Enumerant msg -> m (B'.Text msg))) where
+    fromLabel = H'.Get $ get_Enumerant'name
 has_Enumerant'name :: U'.ReadCtx m msg => Enumerant msg -> m Bool
 has_Enumerant'name(Enumerant_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_Enumerant'name :: U'.RWCtx m s => Enumerant (M'.MutMsg s) -> (B'.Text (M'.MutMsg s)) -> m ()
@@ -305,12 +329,16 @@ new_Enumerant'name len struct = do
     pure result
 get_Enumerant'codeOrder :: U'.ReadCtx m msg => Enumerant msg -> m Word16
 get_Enumerant'codeOrder (Enumerant_newtype_ struct) = H'.getWordField struct 0 0 0
+instance U'.ReadCtx m msg => IsLabel "codeOrder"(H'.Get (Enumerant msg -> m Word16)) where
+    fromLabel = H'.Get $ get_Enumerant'codeOrder
 set_Enumerant'codeOrder :: U'.RWCtx m s => Enumerant (M'.MutMsg s) -> Word16 -> m ()
 set_Enumerant'codeOrder (Enumerant_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word16) 0 0 0
 get_Enumerant'annotations :: U'.ReadCtx m msg => Enumerant msg -> m (B'.List msg (Annotation msg))
 get_Enumerant'annotations (Enumerant_newtype_ struct) =
     U'.getPtr 1 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "annotations"(H'.Get (Enumerant msg -> m (B'.List msg (Annotation msg)))) where
+    fromLabel = H'.Get $ get_Enumerant'annotations
 has_Enumerant'annotations :: U'.ReadCtx m msg => Enumerant msg -> m Bool
 has_Enumerant'annotations(Enumerant_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 1 struct
 set_Enumerant'annotations :: U'.RWCtx m s => Enumerant (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (Annotation (M'.MutMsg s))) -> m ()
@@ -349,6 +377,8 @@ get_Field'name :: U'.ReadCtx m msg => Field msg -> m (B'.Text msg)
 get_Field'name (Field_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "name"(H'.Get (Field msg -> m (B'.Text msg))) where
+    fromLabel = H'.Get $ get_Field'name
 has_Field'name :: U'.ReadCtx m msg => Field msg -> m Bool
 has_Field'name(Field_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_Field'name :: U'.RWCtx m s => Field (M'.MutMsg s) -> (B'.Text (M'.MutMsg s)) -> m ()
@@ -360,12 +390,16 @@ new_Field'name len struct = do
     pure result
 get_Field'codeOrder :: U'.ReadCtx m msg => Field msg -> m Word16
 get_Field'codeOrder (Field_newtype_ struct) = H'.getWordField struct 0 0 0
+instance U'.ReadCtx m msg => IsLabel "codeOrder"(H'.Get (Field msg -> m Word16)) where
+    fromLabel = H'.Get $ get_Field'codeOrder
 set_Field'codeOrder :: U'.RWCtx m s => Field (M'.MutMsg s) -> Word16 -> m ()
 set_Field'codeOrder (Field_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word16) 0 0 0
 get_Field'annotations :: U'.ReadCtx m msg => Field msg -> m (B'.List msg (Annotation msg))
 get_Field'annotations (Field_newtype_ struct) =
     U'.getPtr 1 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "annotations"(H'.Get (Field msg -> m (B'.List msg (Annotation msg)))) where
+    fromLabel = H'.Get $ get_Field'annotations
 has_Field'annotations :: U'.ReadCtx m msg => Field msg -> m Bool
 has_Field'annotations(Field_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 1 struct
 set_Field'annotations :: U'.RWCtx m s => Field (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (Annotation (M'.MutMsg s))) -> m ()
@@ -377,12 +411,18 @@ new_Field'annotations len struct = do
     pure result
 get_Field'discriminantValue :: U'.ReadCtx m msg => Field msg -> m Word16
 get_Field'discriminantValue (Field_newtype_ struct) = H'.getWordField struct 0 16 65535
+instance U'.ReadCtx m msg => IsLabel "discriminantValue"(H'.Get (Field msg -> m Word16)) where
+    fromLabel = H'.Get $ get_Field'discriminantValue
 set_Field'discriminantValue :: U'.RWCtx m s => Field (M'.MutMsg s) -> Word16 -> m ()
 set_Field'discriminantValue (Field_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word16) 0 16 65535
 get_Field'ordinal :: U'.ReadCtx m msg => Field msg -> m (Field'ordinal msg)
 get_Field'ordinal (Field_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel "ordinal"(H'.Get (Field msg -> m (Field'ordinal msg))) where
+    fromLabel = H'.Get $ get_Field'ordinal
 get_Field'union' :: U'.ReadCtx m msg => Field msg -> m (Field' msg)
 get_Field'union' (Field_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel "union'"(H'.Get (Field msg -> m (Field' msg))) where
+    fromLabel = H'.Get $ get_Field'union'
 newtype Method msg = Method_newtype_ (U'.Struct msg)
 instance C'.FromStruct msg (Method msg) where
     fromStruct = pure . Method_newtype_
@@ -412,6 +452,8 @@ get_Method'name :: U'.ReadCtx m msg => Method msg -> m (B'.Text msg)
 get_Method'name (Method_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "name"(H'.Get (Method msg -> m (B'.Text msg))) where
+    fromLabel = H'.Get $ get_Method'name
 has_Method'name :: U'.ReadCtx m msg => Method msg -> m Bool
 has_Method'name(Method_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_Method'name :: U'.RWCtx m s => Method (M'.MutMsg s) -> (B'.Text (M'.MutMsg s)) -> m ()
@@ -423,20 +465,28 @@ new_Method'name len struct = do
     pure result
 get_Method'codeOrder :: U'.ReadCtx m msg => Method msg -> m Word16
 get_Method'codeOrder (Method_newtype_ struct) = H'.getWordField struct 0 0 0
+instance U'.ReadCtx m msg => IsLabel "codeOrder"(H'.Get (Method msg -> m Word16)) where
+    fromLabel = H'.Get $ get_Method'codeOrder
 set_Method'codeOrder :: U'.RWCtx m s => Method (M'.MutMsg s) -> Word16 -> m ()
 set_Method'codeOrder (Method_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word16) 0 0 0
 get_Method'paramStructType :: U'.ReadCtx m msg => Method msg -> m Word64
 get_Method'paramStructType (Method_newtype_ struct) = H'.getWordField struct 1 0 0
+instance U'.ReadCtx m msg => IsLabel "paramStructType"(H'.Get (Method msg -> m Word64)) where
+    fromLabel = H'.Get $ get_Method'paramStructType
 set_Method'paramStructType :: U'.RWCtx m s => Method (M'.MutMsg s) -> Word64 -> m ()
 set_Method'paramStructType (Method_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 1 0 0
 get_Method'resultStructType :: U'.ReadCtx m msg => Method msg -> m Word64
 get_Method'resultStructType (Method_newtype_ struct) = H'.getWordField struct 2 0 0
+instance U'.ReadCtx m msg => IsLabel "resultStructType"(H'.Get (Method msg -> m Word64)) where
+    fromLabel = H'.Get $ get_Method'resultStructType
 set_Method'resultStructType :: U'.RWCtx m s => Method (M'.MutMsg s) -> Word64 -> m ()
 set_Method'resultStructType (Method_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 2 0 0
 get_Method'annotations :: U'.ReadCtx m msg => Method msg -> m (B'.List msg (Annotation msg))
 get_Method'annotations (Method_newtype_ struct) =
     U'.getPtr 1 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "annotations"(H'.Get (Method msg -> m (B'.List msg (Annotation msg)))) where
+    fromLabel = H'.Get $ get_Method'annotations
 has_Method'annotations :: U'.ReadCtx m msg => Method msg -> m Bool
 has_Method'annotations(Method_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 1 struct
 set_Method'annotations :: U'.RWCtx m s => Method (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (Annotation (M'.MutMsg s))) -> m ()
@@ -450,6 +500,8 @@ get_Method'paramBrand :: U'.ReadCtx m msg => Method msg -> m (Brand msg)
 get_Method'paramBrand (Method_newtype_ struct) =
     U'.getPtr 2 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "paramBrand"(H'.Get (Method msg -> m (Brand msg))) where
+    fromLabel = H'.Get $ get_Method'paramBrand
 has_Method'paramBrand :: U'.ReadCtx m msg => Method msg -> m Bool
 has_Method'paramBrand(Method_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 2 struct
 set_Method'paramBrand :: U'.RWCtx m s => Method (M'.MutMsg s) -> (Brand (M'.MutMsg s)) -> m ()
@@ -463,6 +515,8 @@ get_Method'resultBrand :: U'.ReadCtx m msg => Method msg -> m (Brand msg)
 get_Method'resultBrand (Method_newtype_ struct) =
     U'.getPtr 3 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "resultBrand"(H'.Get (Method msg -> m (Brand msg))) where
+    fromLabel = H'.Get $ get_Method'resultBrand
 has_Method'resultBrand :: U'.ReadCtx m msg => Method msg -> m Bool
 has_Method'resultBrand(Method_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 3 struct
 set_Method'resultBrand :: U'.RWCtx m s => Method (M'.MutMsg s) -> (Brand (M'.MutMsg s)) -> m ()
@@ -476,6 +530,8 @@ get_Method'implicitParameters :: U'.ReadCtx m msg => Method msg -> m (B'.List ms
 get_Method'implicitParameters (Method_newtype_ struct) =
     U'.getPtr 4 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "implicitParameters"(H'.Get (Method msg -> m (B'.List msg (Node'Parameter msg)))) where
+    fromLabel = H'.Get $ get_Method'implicitParameters
 has_Method'implicitParameters :: U'.ReadCtx m msg => Method msg -> m Bool
 has_Method'implicitParameters(Method_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 4 struct
 set_Method'implicitParameters :: U'.RWCtx m s => Method (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (Node'Parameter (M'.MutMsg s))) -> m ()
@@ -512,12 +568,16 @@ instance C'.IsPtr msg (B'.List msg (Node msg)) where
     toPtr (List_Node l) = C'.toPtr l
 get_Node'id :: U'.ReadCtx m msg => Node msg -> m Word64
 get_Node'id (Node_newtype_ struct) = H'.getWordField struct 0 0 0
+instance U'.ReadCtx m msg => IsLabel "id"(H'.Get (Node msg -> m Word64)) where
+    fromLabel = H'.Get $ get_Node'id
 set_Node'id :: U'.RWCtx m s => Node (M'.MutMsg s) -> Word64 -> m ()
 set_Node'id (Node_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 0 0 0
 get_Node'displayName :: U'.ReadCtx m msg => Node msg -> m (B'.Text msg)
 get_Node'displayName (Node_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "displayName"(H'.Get (Node msg -> m (B'.Text msg))) where
+    fromLabel = H'.Get $ get_Node'displayName
 has_Node'displayName :: U'.ReadCtx m msg => Node msg -> m Bool
 has_Node'displayName(Node_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_Node'displayName :: U'.RWCtx m s => Node (M'.MutMsg s) -> (B'.Text (M'.MutMsg s)) -> m ()
@@ -529,16 +589,22 @@ new_Node'displayName len struct = do
     pure result
 get_Node'displayNamePrefixLength :: U'.ReadCtx m msg => Node msg -> m Word32
 get_Node'displayNamePrefixLength (Node_newtype_ struct) = H'.getWordField struct 1 0 0
+instance U'.ReadCtx m msg => IsLabel "displayNamePrefixLength"(H'.Get (Node msg -> m Word32)) where
+    fromLabel = H'.Get $ get_Node'displayNamePrefixLength
 set_Node'displayNamePrefixLength :: U'.RWCtx m s => Node (M'.MutMsg s) -> Word32 -> m ()
 set_Node'displayNamePrefixLength (Node_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word32) 1 0 0
 get_Node'scopeId :: U'.ReadCtx m msg => Node msg -> m Word64
 get_Node'scopeId (Node_newtype_ struct) = H'.getWordField struct 2 0 0
+instance U'.ReadCtx m msg => IsLabel "scopeId"(H'.Get (Node msg -> m Word64)) where
+    fromLabel = H'.Get $ get_Node'scopeId
 set_Node'scopeId :: U'.RWCtx m s => Node (M'.MutMsg s) -> Word64 -> m ()
 set_Node'scopeId (Node_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 2 0 0
 get_Node'nestedNodes :: U'.ReadCtx m msg => Node msg -> m (B'.List msg (Node'NestedNode msg))
 get_Node'nestedNodes (Node_newtype_ struct) =
     U'.getPtr 1 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "nestedNodes"(H'.Get (Node msg -> m (B'.List msg (Node'NestedNode msg)))) where
+    fromLabel = H'.Get $ get_Node'nestedNodes
 has_Node'nestedNodes :: U'.ReadCtx m msg => Node msg -> m Bool
 has_Node'nestedNodes(Node_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 1 struct
 set_Node'nestedNodes :: U'.RWCtx m s => Node (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (Node'NestedNode (M'.MutMsg s))) -> m ()
@@ -552,6 +618,8 @@ get_Node'annotations :: U'.ReadCtx m msg => Node msg -> m (B'.List msg (Annotati
 get_Node'annotations (Node_newtype_ struct) =
     U'.getPtr 2 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "annotations"(H'.Get (Node msg -> m (B'.List msg (Annotation msg)))) where
+    fromLabel = H'.Get $ get_Node'annotations
 has_Node'annotations :: U'.ReadCtx m msg => Node msg -> m Bool
 has_Node'annotations(Node_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 2 struct
 set_Node'annotations :: U'.RWCtx m s => Node (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (Annotation (M'.MutMsg s))) -> m ()
@@ -565,6 +633,8 @@ get_Node'parameters :: U'.ReadCtx m msg => Node msg -> m (B'.List msg (Node'Para
 get_Node'parameters (Node_newtype_ struct) =
     U'.getPtr 5 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "parameters"(H'.Get (Node msg -> m (B'.List msg (Node'Parameter msg)))) where
+    fromLabel = H'.Get $ get_Node'parameters
 has_Node'parameters :: U'.ReadCtx m msg => Node msg -> m Bool
 has_Node'parameters(Node_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 5 struct
 set_Node'parameters :: U'.RWCtx m s => Node (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (Node'Parameter (M'.MutMsg s))) -> m ()
@@ -576,10 +646,14 @@ new_Node'parameters len struct = do
     pure result
 get_Node'isGeneric :: U'.ReadCtx m msg => Node msg -> m Bool
 get_Node'isGeneric (Node_newtype_ struct) = H'.getWordField struct 4 32 0
+instance U'.ReadCtx m msg => IsLabel "isGeneric"(H'.Get (Node msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Node'isGeneric
 set_Node'isGeneric :: U'.RWCtx m s => Node (M'.MutMsg s) -> Bool -> m ()
 set_Node'isGeneric (Node_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 4 32 0
 get_Node'union' :: U'.ReadCtx m msg => Node msg -> m (Node' msg)
 get_Node'union' (Node_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel "union'"(H'.Get (Node msg -> m (Node' msg))) where
+    fromLabel = H'.Get $ get_Node'union'
 newtype Superclass msg = Superclass_newtype_ (U'.Struct msg)
 instance C'.FromStruct msg (Superclass msg) where
     fromStruct = pure . Superclass_newtype_
@@ -607,12 +681,16 @@ instance C'.IsPtr msg (B'.List msg (Superclass msg)) where
     toPtr (List_Superclass l) = C'.toPtr l
 get_Superclass'id :: U'.ReadCtx m msg => Superclass msg -> m Word64
 get_Superclass'id (Superclass_newtype_ struct) = H'.getWordField struct 0 0 0
+instance U'.ReadCtx m msg => IsLabel "id"(H'.Get (Superclass msg -> m Word64)) where
+    fromLabel = H'.Get $ get_Superclass'id
 set_Superclass'id :: U'.RWCtx m s => Superclass (M'.MutMsg s) -> Word64 -> m ()
 set_Superclass'id (Superclass_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 0 0 0
 get_Superclass'brand :: U'.ReadCtx m msg => Superclass msg -> m (Brand msg)
 get_Superclass'brand (Superclass_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "brand"(H'.Get (Superclass msg -> m (Brand msg))) where
+    fromLabel = H'.Get $ get_Superclass'brand
 has_Superclass'brand :: U'.ReadCtx m msg => Superclass msg -> m Bool
 has_Superclass'brand(Superclass_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_Superclass'brand :: U'.RWCtx m s => Superclass (M'.MutMsg s) -> (Brand (M'.MutMsg s)) -> m ()
@@ -670,6 +748,8 @@ data Type' msg
     | Type'unknown' Word16
 get_Type' :: U'.ReadCtx m msg => Type msg -> m (Type' msg)
 get_Type' (Type_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel ""(H'.Get (Type msg -> m (Type' msg))) where
+    fromLabel = H'.Get $ get_Type'
 set_Type'void :: U'.RWCtx m s => Type (M'.MutMsg s) -> m ()
 set_Type'void (Type_newtype_ struct) = H'.setWordField struct (0 :: Word16) 0 0 0
 set_Type'bool :: U'.RWCtx m s => Type (M'.MutMsg s) -> m ()
@@ -734,6 +814,8 @@ get_Type'list'elementType :: U'.ReadCtx m msg => Type'list'group' msg -> m (Type
 get_Type'list'elementType (Type'list'group'_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "elementType"(H'.Get (Type'list'group' msg -> m (Type msg))) where
+    fromLabel = H'.Get $ get_Type'list'elementType
 has_Type'list'elementType :: U'.ReadCtx m msg => Type'list'group' msg -> m Bool
 has_Type'list'elementType(Type'list'group'_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_Type'list'elementType :: U'.RWCtx m s => Type'list'group' (M'.MutMsg s) -> (Type (M'.MutMsg s)) -> m ()
@@ -755,12 +837,16 @@ instance U'.MessageDefault (Type'enum'group' msg) where
     messageDefault = Type'enum'group'_newtype_ . U'.messageDefault
 get_Type'enum'typeId :: U'.ReadCtx m msg => Type'enum'group' msg -> m Word64
 get_Type'enum'typeId (Type'enum'group'_newtype_ struct) = H'.getWordField struct 1 0 0
+instance U'.ReadCtx m msg => IsLabel "typeId"(H'.Get (Type'enum'group' msg -> m Word64)) where
+    fromLabel = H'.Get $ get_Type'enum'typeId
 set_Type'enum'typeId :: U'.RWCtx m s => Type'enum'group' (M'.MutMsg s) -> Word64 -> m ()
 set_Type'enum'typeId (Type'enum'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 1 0 0
 get_Type'enum'brand :: U'.ReadCtx m msg => Type'enum'group' msg -> m (Brand msg)
 get_Type'enum'brand (Type'enum'group'_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "brand"(H'.Get (Type'enum'group' msg -> m (Brand msg))) where
+    fromLabel = H'.Get $ get_Type'enum'brand
 has_Type'enum'brand :: U'.ReadCtx m msg => Type'enum'group' msg -> m Bool
 has_Type'enum'brand(Type'enum'group'_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_Type'enum'brand :: U'.RWCtx m s => Type'enum'group' (M'.MutMsg s) -> (Brand (M'.MutMsg s)) -> m ()
@@ -782,12 +868,16 @@ instance U'.MessageDefault (Type'struct'group' msg) where
     messageDefault = Type'struct'group'_newtype_ . U'.messageDefault
 get_Type'struct'typeId :: U'.ReadCtx m msg => Type'struct'group' msg -> m Word64
 get_Type'struct'typeId (Type'struct'group'_newtype_ struct) = H'.getWordField struct 1 0 0
+instance U'.ReadCtx m msg => IsLabel "typeId"(H'.Get (Type'struct'group' msg -> m Word64)) where
+    fromLabel = H'.Get $ get_Type'struct'typeId
 set_Type'struct'typeId :: U'.RWCtx m s => Type'struct'group' (M'.MutMsg s) -> Word64 -> m ()
 set_Type'struct'typeId (Type'struct'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 1 0 0
 get_Type'struct'brand :: U'.ReadCtx m msg => Type'struct'group' msg -> m (Brand msg)
 get_Type'struct'brand (Type'struct'group'_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "brand"(H'.Get (Type'struct'group' msg -> m (Brand msg))) where
+    fromLabel = H'.Get $ get_Type'struct'brand
 has_Type'struct'brand :: U'.ReadCtx m msg => Type'struct'group' msg -> m Bool
 has_Type'struct'brand(Type'struct'group'_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_Type'struct'brand :: U'.RWCtx m s => Type'struct'group' (M'.MutMsg s) -> (Brand (M'.MutMsg s)) -> m ()
@@ -809,12 +899,16 @@ instance U'.MessageDefault (Type'interface'group' msg) where
     messageDefault = Type'interface'group'_newtype_ . U'.messageDefault
 get_Type'interface'typeId :: U'.ReadCtx m msg => Type'interface'group' msg -> m Word64
 get_Type'interface'typeId (Type'interface'group'_newtype_ struct) = H'.getWordField struct 1 0 0
+instance U'.ReadCtx m msg => IsLabel "typeId"(H'.Get (Type'interface'group' msg -> m Word64)) where
+    fromLabel = H'.Get $ get_Type'interface'typeId
 set_Type'interface'typeId :: U'.RWCtx m s => Type'interface'group' (M'.MutMsg s) -> Word64 -> m ()
 set_Type'interface'typeId (Type'interface'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 1 0 0
 get_Type'interface'brand :: U'.ReadCtx m msg => Type'interface'group' msg -> m (Brand msg)
 get_Type'interface'brand (Type'interface'group'_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "brand"(H'.Get (Type'interface'group' msg -> m (Brand msg))) where
+    fromLabel = H'.Get $ get_Type'interface'brand
 has_Type'interface'brand :: U'.ReadCtx m msg => Type'interface'group' msg -> m Bool
 has_Type'interface'brand(Type'interface'group'_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_Type'interface'brand :: U'.RWCtx m s => Type'interface'group' (M'.MutMsg s) -> (Brand (M'.MutMsg s)) -> m ()
@@ -836,6 +930,8 @@ instance U'.MessageDefault (Type'anyPointer'group' msg) where
     messageDefault = Type'anyPointer'group'_newtype_ . U'.messageDefault
 get_Type'anyPointer'union' :: U'.ReadCtx m msg => Type'anyPointer'group' msg -> m (Type'anyPointer msg)
 get_Type'anyPointer'union' (Type'anyPointer'group'_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel "union'"(H'.Get (Type'anyPointer'group' msg -> m (Type'anyPointer msg))) where
+    fromLabel = H'.Get $ get_Type'anyPointer'union'
 instance C'.FromStruct msg (Type' msg) where
     fromStruct struct = do
         tag <-  H'.getWordField struct 0 0 0
@@ -908,6 +1004,8 @@ data Value' msg
     | Value'unknown' Word16
 get_Value' :: U'.ReadCtx m msg => Value msg -> m (Value' msg)
 get_Value' (Value_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel ""(H'.Get (Value msg -> m (Value' msg))) where
+    fromLabel = H'.Get $ get_Value'
 set_Value'void :: U'.RWCtx m s => Value (M'.MutMsg s) -> m ()
 set_Value'void (Value_newtype_ struct) = H'.setWordField struct (0 :: Word16) 0 0 0
 set_Value'bool :: U'.RWCtx m s => Value (M'.MutMsg s) -> Bool -> m ()
@@ -1047,6 +1145,8 @@ data Brand'Binding' msg
     | Brand'Binding'unknown' Word16
 get_Brand'Binding' :: U'.ReadCtx m msg => Brand'Binding msg -> m (Brand'Binding' msg)
 get_Brand'Binding' (Brand'Binding_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel ""(H'.Get (Brand'Binding msg -> m (Brand'Binding' msg))) where
+    fromLabel = H'.Get $ get_Brand'Binding'
 set_Brand'Binding'unbound :: U'.RWCtx m s => Brand'Binding (M'.MutMsg s) -> m ()
 set_Brand'Binding'unbound (Brand'Binding_newtype_ struct) = H'.setWordField struct (0 :: Word16) 0 0 0
 set_Brand'Binding'type_ :: U'.RWCtx m s => Brand'Binding (M'.MutMsg s) -> (Type (M'.MutMsg s)) -> m ()
@@ -1094,10 +1194,14 @@ instance C'.IsPtr msg (B'.List msg (Brand'Scope msg)) where
     toPtr (List_Brand'Scope l) = C'.toPtr l
 get_Brand'Scope'scopeId :: U'.ReadCtx m msg => Brand'Scope msg -> m Word64
 get_Brand'Scope'scopeId (Brand'Scope_newtype_ struct) = H'.getWordField struct 0 0 0
+instance U'.ReadCtx m msg => IsLabel "scopeId"(H'.Get (Brand'Scope msg -> m Word64)) where
+    fromLabel = H'.Get $ get_Brand'Scope'scopeId
 set_Brand'Scope'scopeId :: U'.RWCtx m s => Brand'Scope (M'.MutMsg s) -> Word64 -> m ()
 set_Brand'Scope'scopeId (Brand'Scope_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 0 0 0
 get_Brand'Scope'union' :: U'.ReadCtx m msg => Brand'Scope msg -> m (Brand'Scope' msg)
 get_Brand'Scope'union' (Brand'Scope_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel "union'"(H'.Get (Brand'Scope msg -> m (Brand'Scope' msg))) where
+    fromLabel = H'.Get $ get_Brand'Scope'union'
 newtype Brand'Scope' msg = Brand'Scope'_newtype_ (U'.Struct msg)
 instance C'.FromStruct msg (Brand'Scope' msg) where
     fromStruct = pure . Brand'Scope'_newtype_
@@ -1129,6 +1233,8 @@ data Brand'Scope'' msg
     | Brand'Scope''unknown' Word16
 get_Brand'Scope'' :: U'.ReadCtx m msg => Brand'Scope' msg -> m (Brand'Scope'' msg)
 get_Brand'Scope'' (Brand'Scope'_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel ""(H'.Get (Brand'Scope' msg -> m (Brand'Scope'' msg))) where
+    fromLabel = H'.Get $ get_Brand'Scope''
 set_Brand'Scope'bind :: U'.RWCtx m s => Brand'Scope' (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (Brand'Binding (M'.MutMsg s))) -> m ()
 set_Brand'Scope'bind(Brand'Scope'_newtype_ struct) value = do
     H'.setWordField struct (0 :: Word16) 1 0 0
@@ -1176,12 +1282,16 @@ instance C'.IsPtr msg (B'.List msg (CodeGeneratorRequest'RequestedFile msg)) whe
     toPtr (List_CodeGeneratorRequest'RequestedFile l) = C'.toPtr l
 get_CodeGeneratorRequest'RequestedFile'id :: U'.ReadCtx m msg => CodeGeneratorRequest'RequestedFile msg -> m Word64
 get_CodeGeneratorRequest'RequestedFile'id (CodeGeneratorRequest'RequestedFile_newtype_ struct) = H'.getWordField struct 0 0 0
+instance U'.ReadCtx m msg => IsLabel "id"(H'.Get (CodeGeneratorRequest'RequestedFile msg -> m Word64)) where
+    fromLabel = H'.Get $ get_CodeGeneratorRequest'RequestedFile'id
 set_CodeGeneratorRequest'RequestedFile'id :: U'.RWCtx m s => CodeGeneratorRequest'RequestedFile (M'.MutMsg s) -> Word64 -> m ()
 set_CodeGeneratorRequest'RequestedFile'id (CodeGeneratorRequest'RequestedFile_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 0 0 0
 get_CodeGeneratorRequest'RequestedFile'filename :: U'.ReadCtx m msg => CodeGeneratorRequest'RequestedFile msg -> m (B'.Text msg)
 get_CodeGeneratorRequest'RequestedFile'filename (CodeGeneratorRequest'RequestedFile_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "filename"(H'.Get (CodeGeneratorRequest'RequestedFile msg -> m (B'.Text msg))) where
+    fromLabel = H'.Get $ get_CodeGeneratorRequest'RequestedFile'filename
 has_CodeGeneratorRequest'RequestedFile'filename :: U'.ReadCtx m msg => CodeGeneratorRequest'RequestedFile msg -> m Bool
 has_CodeGeneratorRequest'RequestedFile'filename(CodeGeneratorRequest'RequestedFile_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_CodeGeneratorRequest'RequestedFile'filename :: U'.RWCtx m s => CodeGeneratorRequest'RequestedFile (M'.MutMsg s) -> (B'.Text (M'.MutMsg s)) -> m ()
@@ -1195,6 +1305,8 @@ get_CodeGeneratorRequest'RequestedFile'imports :: U'.ReadCtx m msg => CodeGenera
 get_CodeGeneratorRequest'RequestedFile'imports (CodeGeneratorRequest'RequestedFile_newtype_ struct) =
     U'.getPtr 1 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "imports"(H'.Get (CodeGeneratorRequest'RequestedFile msg -> m (B'.List msg (CodeGeneratorRequest'RequestedFile'Import msg)))) where
+    fromLabel = H'.Get $ get_CodeGeneratorRequest'RequestedFile'imports
 has_CodeGeneratorRequest'RequestedFile'imports :: U'.ReadCtx m msg => CodeGeneratorRequest'RequestedFile msg -> m Bool
 has_CodeGeneratorRequest'RequestedFile'imports(CodeGeneratorRequest'RequestedFile_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 1 struct
 set_CodeGeneratorRequest'RequestedFile'imports :: U'.RWCtx m s => CodeGeneratorRequest'RequestedFile (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (CodeGeneratorRequest'RequestedFile'Import (M'.MutMsg s))) -> m ()
@@ -1231,12 +1343,16 @@ instance C'.IsPtr msg (B'.List msg (CodeGeneratorRequest'RequestedFile'Import ms
     toPtr (List_CodeGeneratorRequest'RequestedFile'Import l) = C'.toPtr l
 get_CodeGeneratorRequest'RequestedFile'Import'id :: U'.ReadCtx m msg => CodeGeneratorRequest'RequestedFile'Import msg -> m Word64
 get_CodeGeneratorRequest'RequestedFile'Import'id (CodeGeneratorRequest'RequestedFile'Import_newtype_ struct) = H'.getWordField struct 0 0 0
+instance U'.ReadCtx m msg => IsLabel "id"(H'.Get (CodeGeneratorRequest'RequestedFile'Import msg -> m Word64)) where
+    fromLabel = H'.Get $ get_CodeGeneratorRequest'RequestedFile'Import'id
 set_CodeGeneratorRequest'RequestedFile'Import'id :: U'.RWCtx m s => CodeGeneratorRequest'RequestedFile'Import (M'.MutMsg s) -> Word64 -> m ()
 set_CodeGeneratorRequest'RequestedFile'Import'id (CodeGeneratorRequest'RequestedFile'Import_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 0 0 0
 get_CodeGeneratorRequest'RequestedFile'Import'name :: U'.ReadCtx m msg => CodeGeneratorRequest'RequestedFile'Import msg -> m (B'.Text msg)
 get_CodeGeneratorRequest'RequestedFile'Import'name (CodeGeneratorRequest'RequestedFile'Import_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "name"(H'.Get (CodeGeneratorRequest'RequestedFile'Import msg -> m (B'.Text msg))) where
+    fromLabel = H'.Get $ get_CodeGeneratorRequest'RequestedFile'Import'name
 has_CodeGeneratorRequest'RequestedFile'Import'name :: U'.ReadCtx m msg => CodeGeneratorRequest'RequestedFile'Import msg -> m Bool
 has_CodeGeneratorRequest'RequestedFile'Import'name(CodeGeneratorRequest'RequestedFile'Import_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_CodeGeneratorRequest'RequestedFile'Import'name :: U'.RWCtx m s => CodeGeneratorRequest'RequestedFile'Import (M'.MutMsg s) -> (B'.Text (M'.MutMsg s)) -> m ()
@@ -1277,6 +1393,8 @@ data Field'' msg
     | Field''unknown' Word16
 get_Field'' :: U'.ReadCtx m msg => Field' msg -> m (Field'' msg)
 get_Field'' (Field'_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel ""(H'.Get (Field' msg -> m (Field'' msg))) where
+    fromLabel = H'.Get $ get_Field''
 set_Field'slot :: U'.RWCtx m s => Field' (M'.MutMsg s) -> m (Field'slot'group' (M'.MutMsg s))
 set_Field'slot (Field'_newtype_ struct) = do
     H'.setWordField struct (0 :: Word16) 1 0 0
@@ -1299,12 +1417,16 @@ instance U'.MessageDefault (Field'slot'group' msg) where
     messageDefault = Field'slot'group'_newtype_ . U'.messageDefault
 get_Field'slot'offset :: U'.ReadCtx m msg => Field'slot'group' msg -> m Word32
 get_Field'slot'offset (Field'slot'group'_newtype_ struct) = H'.getWordField struct 0 32 0
+instance U'.ReadCtx m msg => IsLabel "offset"(H'.Get (Field'slot'group' msg -> m Word32)) where
+    fromLabel = H'.Get $ get_Field'slot'offset
 set_Field'slot'offset :: U'.RWCtx m s => Field'slot'group' (M'.MutMsg s) -> Word32 -> m ()
 set_Field'slot'offset (Field'slot'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word32) 0 32 0
 get_Field'slot'type_ :: U'.ReadCtx m msg => Field'slot'group' msg -> m (Type msg)
 get_Field'slot'type_ (Field'slot'group'_newtype_ struct) =
     U'.getPtr 2 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "type_"(H'.Get (Field'slot'group' msg -> m (Type msg))) where
+    fromLabel = H'.Get $ get_Field'slot'type_
 has_Field'slot'type_ :: U'.ReadCtx m msg => Field'slot'group' msg -> m Bool
 has_Field'slot'type_(Field'slot'group'_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 2 struct
 set_Field'slot'type_ :: U'.RWCtx m s => Field'slot'group' (M'.MutMsg s) -> (Type (M'.MutMsg s)) -> m ()
@@ -1318,6 +1440,8 @@ get_Field'slot'defaultValue :: U'.ReadCtx m msg => Field'slot'group' msg -> m (V
 get_Field'slot'defaultValue (Field'slot'group'_newtype_ struct) =
     U'.getPtr 3 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "defaultValue"(H'.Get (Field'slot'group' msg -> m (Value msg))) where
+    fromLabel = H'.Get $ get_Field'slot'defaultValue
 has_Field'slot'defaultValue :: U'.ReadCtx m msg => Field'slot'group' msg -> m Bool
 has_Field'slot'defaultValue(Field'slot'group'_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 3 struct
 set_Field'slot'defaultValue :: U'.RWCtx m s => Field'slot'group' (M'.MutMsg s) -> (Value (M'.MutMsg s)) -> m ()
@@ -1329,6 +1453,8 @@ new_Field'slot'defaultValue struct = do
     pure result
 get_Field'slot'hadExplicitDefault :: U'.ReadCtx m msg => Field'slot'group' msg -> m Bool
 get_Field'slot'hadExplicitDefault (Field'slot'group'_newtype_ struct) = H'.getWordField struct 2 0 0
+instance U'.ReadCtx m msg => IsLabel "hadExplicitDefault"(H'.Get (Field'slot'group' msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Field'slot'hadExplicitDefault
 set_Field'slot'hadExplicitDefault :: U'.RWCtx m s => Field'slot'group' (M'.MutMsg s) -> Bool -> m ()
 set_Field'slot'hadExplicitDefault (Field'slot'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 2 0 0
 newtype Field'group'group' msg = Field'group'group'_newtype_ (U'.Struct msg)
@@ -1343,6 +1469,8 @@ instance U'.MessageDefault (Field'group'group' msg) where
     messageDefault = Field'group'group'_newtype_ . U'.messageDefault
 get_Field'group'typeId :: U'.ReadCtx m msg => Field'group'group' msg -> m Word64
 get_Field'group'typeId (Field'group'group'_newtype_ struct) = H'.getWordField struct 2 0 0
+instance U'.ReadCtx m msg => IsLabel "typeId"(H'.Get (Field'group'group' msg -> m Word64)) where
+    fromLabel = H'.Get $ get_Field'group'typeId
 set_Field'group'typeId :: U'.RWCtx m s => Field'group'group' (M'.MutMsg s) -> Word64 -> m ()
 set_Field'group'typeId (Field'group'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 2 0 0
 instance C'.FromStruct msg (Field'' msg) where
@@ -1370,6 +1498,8 @@ data Field'ordinal' msg
     | Field'ordinal'unknown' Word16
 get_Field'ordinal' :: U'.ReadCtx m msg => Field'ordinal msg -> m (Field'ordinal' msg)
 get_Field'ordinal' (Field'ordinal_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel ""(H'.Get (Field'ordinal msg -> m (Field'ordinal' msg))) where
+    fromLabel = H'.Get $ get_Field'ordinal'
 set_Field'ordinal'implicit :: U'.RWCtx m s => Field'ordinal (M'.MutMsg s) -> m ()
 set_Field'ordinal'implicit (Field'ordinal_newtype_ struct) = H'.setWordField struct (0 :: Word16) 1 16 0
 set_Field'ordinal'explicit :: U'.RWCtx m s => Field'ordinal (M'.MutMsg s) -> Word16 -> m ()
@@ -1420,6 +1550,8 @@ data Node'' msg
     | Node''unknown' Word16
 get_Node'' :: U'.ReadCtx m msg => Node' msg -> m (Node'' msg)
 get_Node'' (Node'_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel ""(H'.Get (Node' msg -> m (Node'' msg))) where
+    fromLabel = H'.Get $ get_Node''
 set_Node'file :: U'.RWCtx m s => Node' (M'.MutMsg s) -> m ()
 set_Node'file (Node'_newtype_ struct) = H'.setWordField struct (0 :: Word16) 1 32 0
 set_Node'struct :: U'.RWCtx m s => Node' (M'.MutMsg s) -> m (Node'struct'group' (M'.MutMsg s))
@@ -1456,32 +1588,46 @@ instance U'.MessageDefault (Node'struct'group' msg) where
     messageDefault = Node'struct'group'_newtype_ . U'.messageDefault
 get_Node'struct'dataWordCount :: U'.ReadCtx m msg => Node'struct'group' msg -> m Word16
 get_Node'struct'dataWordCount (Node'struct'group'_newtype_ struct) = H'.getWordField struct 1 48 0
+instance U'.ReadCtx m msg => IsLabel "dataWordCount"(H'.Get (Node'struct'group' msg -> m Word16)) where
+    fromLabel = H'.Get $ get_Node'struct'dataWordCount
 set_Node'struct'dataWordCount :: U'.RWCtx m s => Node'struct'group' (M'.MutMsg s) -> Word16 -> m ()
 set_Node'struct'dataWordCount (Node'struct'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word16) 1 48 0
 get_Node'struct'pointerCount :: U'.ReadCtx m msg => Node'struct'group' msg -> m Word16
 get_Node'struct'pointerCount (Node'struct'group'_newtype_ struct) = H'.getWordField struct 3 0 0
+instance U'.ReadCtx m msg => IsLabel "pointerCount"(H'.Get (Node'struct'group' msg -> m Word16)) where
+    fromLabel = H'.Get $ get_Node'struct'pointerCount
 set_Node'struct'pointerCount :: U'.RWCtx m s => Node'struct'group' (M'.MutMsg s) -> Word16 -> m ()
 set_Node'struct'pointerCount (Node'struct'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word16) 3 0 0
 get_Node'struct'preferredListEncoding :: U'.ReadCtx m msg => Node'struct'group' msg -> m ElementSize
 get_Node'struct'preferredListEncoding (Node'struct'group'_newtype_ struct) = H'.getWordField struct 3 16 0
+instance U'.ReadCtx m msg => IsLabel "preferredListEncoding"(H'.Get (Node'struct'group' msg -> m ElementSize)) where
+    fromLabel = H'.Get $ get_Node'struct'preferredListEncoding
 set_Node'struct'preferredListEncoding :: U'.RWCtx m s => Node'struct'group' (M'.MutMsg s) -> ElementSize -> m ()
 set_Node'struct'preferredListEncoding (Node'struct'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word16) 3 16 0
 get_Node'struct'isGroup :: U'.ReadCtx m msg => Node'struct'group' msg -> m Bool
 get_Node'struct'isGroup (Node'struct'group'_newtype_ struct) = H'.getWordField struct 3 32 0
+instance U'.ReadCtx m msg => IsLabel "isGroup"(H'.Get (Node'struct'group' msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Node'struct'isGroup
 set_Node'struct'isGroup :: U'.RWCtx m s => Node'struct'group' (M'.MutMsg s) -> Bool -> m ()
 set_Node'struct'isGroup (Node'struct'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 3 32 0
 get_Node'struct'discriminantCount :: U'.ReadCtx m msg => Node'struct'group' msg -> m Word16
 get_Node'struct'discriminantCount (Node'struct'group'_newtype_ struct) = H'.getWordField struct 3 48 0
+instance U'.ReadCtx m msg => IsLabel "discriminantCount"(H'.Get (Node'struct'group' msg -> m Word16)) where
+    fromLabel = H'.Get $ get_Node'struct'discriminantCount
 set_Node'struct'discriminantCount :: U'.RWCtx m s => Node'struct'group' (M'.MutMsg s) -> Word16 -> m ()
 set_Node'struct'discriminantCount (Node'struct'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word16) 3 48 0
 get_Node'struct'discriminantOffset :: U'.ReadCtx m msg => Node'struct'group' msg -> m Word32
 get_Node'struct'discriminantOffset (Node'struct'group'_newtype_ struct) = H'.getWordField struct 4 0 0
+instance U'.ReadCtx m msg => IsLabel "discriminantOffset"(H'.Get (Node'struct'group' msg -> m Word32)) where
+    fromLabel = H'.Get $ get_Node'struct'discriminantOffset
 set_Node'struct'discriminantOffset :: U'.RWCtx m s => Node'struct'group' (M'.MutMsg s) -> Word32 -> m ()
 set_Node'struct'discriminantOffset (Node'struct'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word32) 4 0 0
 get_Node'struct'fields :: U'.ReadCtx m msg => Node'struct'group' msg -> m (B'.List msg (Field msg))
 get_Node'struct'fields (Node'struct'group'_newtype_ struct) =
     U'.getPtr 3 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "fields"(H'.Get (Node'struct'group' msg -> m (B'.List msg (Field msg)))) where
+    fromLabel = H'.Get $ get_Node'struct'fields
 has_Node'struct'fields :: U'.ReadCtx m msg => Node'struct'group' msg -> m Bool
 has_Node'struct'fields(Node'struct'group'_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 3 struct
 set_Node'struct'fields :: U'.RWCtx m s => Node'struct'group' (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (Field (M'.MutMsg s))) -> m ()
@@ -1505,6 +1651,8 @@ get_Node'enum'enumerants :: U'.ReadCtx m msg => Node'enum'group' msg -> m (B'.Li
 get_Node'enum'enumerants (Node'enum'group'_newtype_ struct) =
     U'.getPtr 3 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "enumerants"(H'.Get (Node'enum'group' msg -> m (B'.List msg (Enumerant msg)))) where
+    fromLabel = H'.Get $ get_Node'enum'enumerants
 has_Node'enum'enumerants :: U'.ReadCtx m msg => Node'enum'group' msg -> m Bool
 has_Node'enum'enumerants(Node'enum'group'_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 3 struct
 set_Node'enum'enumerants :: U'.RWCtx m s => Node'enum'group' (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (Enumerant (M'.MutMsg s))) -> m ()
@@ -1528,6 +1676,8 @@ get_Node'interface'methods :: U'.ReadCtx m msg => Node'interface'group' msg -> m
 get_Node'interface'methods (Node'interface'group'_newtype_ struct) =
     U'.getPtr 3 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "methods"(H'.Get (Node'interface'group' msg -> m (B'.List msg (Method msg)))) where
+    fromLabel = H'.Get $ get_Node'interface'methods
 has_Node'interface'methods :: U'.ReadCtx m msg => Node'interface'group' msg -> m Bool
 has_Node'interface'methods(Node'interface'group'_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 3 struct
 set_Node'interface'methods :: U'.RWCtx m s => Node'interface'group' (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (Method (M'.MutMsg s))) -> m ()
@@ -1541,6 +1691,8 @@ get_Node'interface'superclasses :: U'.ReadCtx m msg => Node'interface'group' msg
 get_Node'interface'superclasses (Node'interface'group'_newtype_ struct) =
     U'.getPtr 4 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "superclasses"(H'.Get (Node'interface'group' msg -> m (B'.List msg (Superclass msg)))) where
+    fromLabel = H'.Get $ get_Node'interface'superclasses
 has_Node'interface'superclasses :: U'.ReadCtx m msg => Node'interface'group' msg -> m Bool
 has_Node'interface'superclasses(Node'interface'group'_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 4 struct
 set_Node'interface'superclasses :: U'.RWCtx m s => Node'interface'group' (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (Superclass (M'.MutMsg s))) -> m ()
@@ -1564,6 +1716,8 @@ get_Node'const'type_ :: U'.ReadCtx m msg => Node'const'group' msg -> m (Type msg
 get_Node'const'type_ (Node'const'group'_newtype_ struct) =
     U'.getPtr 3 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "type_"(H'.Get (Node'const'group' msg -> m (Type msg))) where
+    fromLabel = H'.Get $ get_Node'const'type_
 has_Node'const'type_ :: U'.ReadCtx m msg => Node'const'group' msg -> m Bool
 has_Node'const'type_(Node'const'group'_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 3 struct
 set_Node'const'type_ :: U'.RWCtx m s => Node'const'group' (M'.MutMsg s) -> (Type (M'.MutMsg s)) -> m ()
@@ -1577,6 +1731,8 @@ get_Node'const'value :: U'.ReadCtx m msg => Node'const'group' msg -> m (Value ms
 get_Node'const'value (Node'const'group'_newtype_ struct) =
     U'.getPtr 4 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "value"(H'.Get (Node'const'group' msg -> m (Value msg))) where
+    fromLabel = H'.Get $ get_Node'const'value
 has_Node'const'value :: U'.ReadCtx m msg => Node'const'group' msg -> m Bool
 has_Node'const'value(Node'const'group'_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 4 struct
 set_Node'const'value :: U'.RWCtx m s => Node'const'group' (M'.MutMsg s) -> (Value (M'.MutMsg s)) -> m ()
@@ -1600,6 +1756,8 @@ get_Node'annotation'type_ :: U'.ReadCtx m msg => Node'annotation'group' msg -> m
 get_Node'annotation'type_ (Node'annotation'group'_newtype_ struct) =
     U'.getPtr 3 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "type_"(H'.Get (Node'annotation'group' msg -> m (Type msg))) where
+    fromLabel = H'.Get $ get_Node'annotation'type_
 has_Node'annotation'type_ :: U'.ReadCtx m msg => Node'annotation'group' msg -> m Bool
 has_Node'annotation'type_(Node'annotation'group'_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 3 struct
 set_Node'annotation'type_ :: U'.RWCtx m s => Node'annotation'group' (M'.MutMsg s) -> (Type (M'.MutMsg s)) -> m ()
@@ -1611,50 +1769,74 @@ new_Node'annotation'type_ struct = do
     pure result
 get_Node'annotation'targetsFile :: U'.ReadCtx m msg => Node'annotation'group' msg -> m Bool
 get_Node'annotation'targetsFile (Node'annotation'group'_newtype_ struct) = H'.getWordField struct 1 48 0
+instance U'.ReadCtx m msg => IsLabel "targetsFile"(H'.Get (Node'annotation'group' msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Node'annotation'targetsFile
 set_Node'annotation'targetsFile :: U'.RWCtx m s => Node'annotation'group' (M'.MutMsg s) -> Bool -> m ()
 set_Node'annotation'targetsFile (Node'annotation'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 1 48 0
 get_Node'annotation'targetsConst :: U'.ReadCtx m msg => Node'annotation'group' msg -> m Bool
 get_Node'annotation'targetsConst (Node'annotation'group'_newtype_ struct) = H'.getWordField struct 1 49 0
+instance U'.ReadCtx m msg => IsLabel "targetsConst"(H'.Get (Node'annotation'group' msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Node'annotation'targetsConst
 set_Node'annotation'targetsConst :: U'.RWCtx m s => Node'annotation'group' (M'.MutMsg s) -> Bool -> m ()
 set_Node'annotation'targetsConst (Node'annotation'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 1 49 0
 get_Node'annotation'targetsEnum :: U'.ReadCtx m msg => Node'annotation'group' msg -> m Bool
 get_Node'annotation'targetsEnum (Node'annotation'group'_newtype_ struct) = H'.getWordField struct 1 50 0
+instance U'.ReadCtx m msg => IsLabel "targetsEnum"(H'.Get (Node'annotation'group' msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Node'annotation'targetsEnum
 set_Node'annotation'targetsEnum :: U'.RWCtx m s => Node'annotation'group' (M'.MutMsg s) -> Bool -> m ()
 set_Node'annotation'targetsEnum (Node'annotation'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 1 50 0
 get_Node'annotation'targetsEnumerant :: U'.ReadCtx m msg => Node'annotation'group' msg -> m Bool
 get_Node'annotation'targetsEnumerant (Node'annotation'group'_newtype_ struct) = H'.getWordField struct 1 51 0
+instance U'.ReadCtx m msg => IsLabel "targetsEnumerant"(H'.Get (Node'annotation'group' msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Node'annotation'targetsEnumerant
 set_Node'annotation'targetsEnumerant :: U'.RWCtx m s => Node'annotation'group' (M'.MutMsg s) -> Bool -> m ()
 set_Node'annotation'targetsEnumerant (Node'annotation'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 1 51 0
 get_Node'annotation'targetsStruct :: U'.ReadCtx m msg => Node'annotation'group' msg -> m Bool
 get_Node'annotation'targetsStruct (Node'annotation'group'_newtype_ struct) = H'.getWordField struct 1 52 0
+instance U'.ReadCtx m msg => IsLabel "targetsStruct"(H'.Get (Node'annotation'group' msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Node'annotation'targetsStruct
 set_Node'annotation'targetsStruct :: U'.RWCtx m s => Node'annotation'group' (M'.MutMsg s) -> Bool -> m ()
 set_Node'annotation'targetsStruct (Node'annotation'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 1 52 0
 get_Node'annotation'targetsField :: U'.ReadCtx m msg => Node'annotation'group' msg -> m Bool
 get_Node'annotation'targetsField (Node'annotation'group'_newtype_ struct) = H'.getWordField struct 1 53 0
+instance U'.ReadCtx m msg => IsLabel "targetsField"(H'.Get (Node'annotation'group' msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Node'annotation'targetsField
 set_Node'annotation'targetsField :: U'.RWCtx m s => Node'annotation'group' (M'.MutMsg s) -> Bool -> m ()
 set_Node'annotation'targetsField (Node'annotation'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 1 53 0
 get_Node'annotation'targetsUnion :: U'.ReadCtx m msg => Node'annotation'group' msg -> m Bool
 get_Node'annotation'targetsUnion (Node'annotation'group'_newtype_ struct) = H'.getWordField struct 1 54 0
+instance U'.ReadCtx m msg => IsLabel "targetsUnion"(H'.Get (Node'annotation'group' msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Node'annotation'targetsUnion
 set_Node'annotation'targetsUnion :: U'.RWCtx m s => Node'annotation'group' (M'.MutMsg s) -> Bool -> m ()
 set_Node'annotation'targetsUnion (Node'annotation'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 1 54 0
 get_Node'annotation'targetsGroup :: U'.ReadCtx m msg => Node'annotation'group' msg -> m Bool
 get_Node'annotation'targetsGroup (Node'annotation'group'_newtype_ struct) = H'.getWordField struct 1 55 0
+instance U'.ReadCtx m msg => IsLabel "targetsGroup"(H'.Get (Node'annotation'group' msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Node'annotation'targetsGroup
 set_Node'annotation'targetsGroup :: U'.RWCtx m s => Node'annotation'group' (M'.MutMsg s) -> Bool -> m ()
 set_Node'annotation'targetsGroup (Node'annotation'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 1 55 0
 get_Node'annotation'targetsInterface :: U'.ReadCtx m msg => Node'annotation'group' msg -> m Bool
 get_Node'annotation'targetsInterface (Node'annotation'group'_newtype_ struct) = H'.getWordField struct 1 56 0
+instance U'.ReadCtx m msg => IsLabel "targetsInterface"(H'.Get (Node'annotation'group' msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Node'annotation'targetsInterface
 set_Node'annotation'targetsInterface :: U'.RWCtx m s => Node'annotation'group' (M'.MutMsg s) -> Bool -> m ()
 set_Node'annotation'targetsInterface (Node'annotation'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 1 56 0
 get_Node'annotation'targetsMethod :: U'.ReadCtx m msg => Node'annotation'group' msg -> m Bool
 get_Node'annotation'targetsMethod (Node'annotation'group'_newtype_ struct) = H'.getWordField struct 1 57 0
+instance U'.ReadCtx m msg => IsLabel "targetsMethod"(H'.Get (Node'annotation'group' msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Node'annotation'targetsMethod
 set_Node'annotation'targetsMethod :: U'.RWCtx m s => Node'annotation'group' (M'.MutMsg s) -> Bool -> m ()
 set_Node'annotation'targetsMethod (Node'annotation'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 1 57 0
 get_Node'annotation'targetsParam :: U'.ReadCtx m msg => Node'annotation'group' msg -> m Bool
 get_Node'annotation'targetsParam (Node'annotation'group'_newtype_ struct) = H'.getWordField struct 1 58 0
+instance U'.ReadCtx m msg => IsLabel "targetsParam"(H'.Get (Node'annotation'group' msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Node'annotation'targetsParam
 set_Node'annotation'targetsParam :: U'.RWCtx m s => Node'annotation'group' (M'.MutMsg s) -> Bool -> m ()
 set_Node'annotation'targetsParam (Node'annotation'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 1 58 0
 get_Node'annotation'targetsAnnotation :: U'.ReadCtx m msg => Node'annotation'group' msg -> m Bool
 get_Node'annotation'targetsAnnotation (Node'annotation'group'_newtype_ struct) = H'.getWordField struct 1 59 0
+instance U'.ReadCtx m msg => IsLabel "targetsAnnotation"(H'.Get (Node'annotation'group' msg -> m Bool)) where
+    fromLabel = H'.Get $ get_Node'annotation'targetsAnnotation
 set_Node'annotation'targetsAnnotation :: U'.RWCtx m s => Node'annotation'group' (M'.MutMsg s) -> Bool -> m ()
 set_Node'annotation'targetsAnnotation (Node'annotation'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word1) 1 59 0
 instance C'.FromStruct msg (Node'' msg) where
@@ -1697,6 +1879,8 @@ get_Node'NestedNode'name :: U'.ReadCtx m msg => Node'NestedNode msg -> m (B'.Tex
 get_Node'NestedNode'name (Node'NestedNode_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "name"(H'.Get (Node'NestedNode msg -> m (B'.Text msg))) where
+    fromLabel = H'.Get $ get_Node'NestedNode'name
 has_Node'NestedNode'name :: U'.ReadCtx m msg => Node'NestedNode msg -> m Bool
 has_Node'NestedNode'name(Node'NestedNode_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_Node'NestedNode'name :: U'.RWCtx m s => Node'NestedNode (M'.MutMsg s) -> (B'.Text (M'.MutMsg s)) -> m ()
@@ -1708,6 +1892,8 @@ new_Node'NestedNode'name len struct = do
     pure result
 get_Node'NestedNode'id :: U'.ReadCtx m msg => Node'NestedNode msg -> m Word64
 get_Node'NestedNode'id (Node'NestedNode_newtype_ struct) = H'.getWordField struct 0 0 0
+instance U'.ReadCtx m msg => IsLabel "id"(H'.Get (Node'NestedNode msg -> m Word64)) where
+    fromLabel = H'.Get $ get_Node'NestedNode'id
 set_Node'NestedNode'id :: U'.RWCtx m s => Node'NestedNode (M'.MutMsg s) -> Word64 -> m ()
 set_Node'NestedNode'id (Node'NestedNode_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 0 0 0
 newtype Node'Parameter msg = Node'Parameter_newtype_ (U'.Struct msg)
@@ -1739,6 +1925,8 @@ get_Node'Parameter'name :: U'.ReadCtx m msg => Node'Parameter msg -> m (B'.Text 
 get_Node'Parameter'name (Node'Parameter_newtype_ struct) =
     U'.getPtr 0 struct
     >>= C'.fromPtr (U'.message struct)
+instance U'.ReadCtx m msg => IsLabel "name"(H'.Get (Node'Parameter msg -> m (B'.Text msg))) where
+    fromLabel = H'.Get $ get_Node'Parameter'name
 has_Node'Parameter'name :: U'.ReadCtx m msg => Node'Parameter msg -> m Bool
 has_Node'Parameter'name(Node'Parameter_newtype_ struct) = Data.Maybe.isJust <$> U'.getPtr 0 struct
 set_Node'Parameter'name :: U'.RWCtx m s => Node'Parameter (M'.MutMsg s) -> (B'.Text (M'.MutMsg s)) -> m ()
@@ -1765,6 +1953,8 @@ data Type'anyPointer' msg
     | Type'anyPointer'unknown' Word16
 get_Type'anyPointer' :: U'.ReadCtx m msg => Type'anyPointer msg -> m (Type'anyPointer' msg)
 get_Type'anyPointer' (Type'anyPointer_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel ""(H'.Get (Type'anyPointer msg -> m (Type'anyPointer' msg))) where
+    fromLabel = H'.Get $ get_Type'anyPointer'
 set_Type'anyPointer'unconstrained :: U'.RWCtx m s => Type'anyPointer (M'.MutMsg s) -> m (Type'anyPointer'unconstrained'group' (M'.MutMsg s))
 set_Type'anyPointer'unconstrained (Type'anyPointer_newtype_ struct) = do
     H'.setWordField struct (0 :: Word16) 1 0 0
@@ -1791,6 +1981,8 @@ instance U'.MessageDefault (Type'anyPointer'unconstrained'group' msg) where
     messageDefault = Type'anyPointer'unconstrained'group'_newtype_ . U'.messageDefault
 get_Type'anyPointer'unconstrained'union' :: U'.ReadCtx m msg => Type'anyPointer'unconstrained'group' msg -> m (Type'anyPointer'unconstrained msg)
 get_Type'anyPointer'unconstrained'union' (Type'anyPointer'unconstrained'group'_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel "union'"(H'.Get (Type'anyPointer'unconstrained'group' msg -> m (Type'anyPointer'unconstrained msg))) where
+    fromLabel = H'.Get $ get_Type'anyPointer'unconstrained'union'
 newtype Type'anyPointer'parameter'group' msg = Type'anyPointer'parameter'group'_newtype_ (U'.Struct msg)
 instance C'.FromStruct msg (Type'anyPointer'parameter'group' msg) where
     fromStruct = pure . Type'anyPointer'parameter'group'_newtype_
@@ -1803,10 +1995,14 @@ instance U'.MessageDefault (Type'anyPointer'parameter'group' msg) where
     messageDefault = Type'anyPointer'parameter'group'_newtype_ . U'.messageDefault
 get_Type'anyPointer'parameter'scopeId :: U'.ReadCtx m msg => Type'anyPointer'parameter'group' msg -> m Word64
 get_Type'anyPointer'parameter'scopeId (Type'anyPointer'parameter'group'_newtype_ struct) = H'.getWordField struct 2 0 0
+instance U'.ReadCtx m msg => IsLabel "scopeId"(H'.Get (Type'anyPointer'parameter'group' msg -> m Word64)) where
+    fromLabel = H'.Get $ get_Type'anyPointer'parameter'scopeId
 set_Type'anyPointer'parameter'scopeId :: U'.RWCtx m s => Type'anyPointer'parameter'group' (M'.MutMsg s) -> Word64 -> m ()
 set_Type'anyPointer'parameter'scopeId (Type'anyPointer'parameter'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word64) 2 0 0
 get_Type'anyPointer'parameter'parameterIndex :: U'.ReadCtx m msg => Type'anyPointer'parameter'group' msg -> m Word16
 get_Type'anyPointer'parameter'parameterIndex (Type'anyPointer'parameter'group'_newtype_ struct) = H'.getWordField struct 1 16 0
+instance U'.ReadCtx m msg => IsLabel "parameterIndex"(H'.Get (Type'anyPointer'parameter'group' msg -> m Word16)) where
+    fromLabel = H'.Get $ get_Type'anyPointer'parameter'parameterIndex
 set_Type'anyPointer'parameter'parameterIndex :: U'.RWCtx m s => Type'anyPointer'parameter'group' (M'.MutMsg s) -> Word16 -> m ()
 set_Type'anyPointer'parameter'parameterIndex (Type'anyPointer'parameter'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word16) 1 16 0
 newtype Type'anyPointer'implicitMethodParameter'group' msg = Type'anyPointer'implicitMethodParameter'group'_newtype_ (U'.Struct msg)
@@ -1821,6 +2017,8 @@ instance U'.MessageDefault (Type'anyPointer'implicitMethodParameter'group' msg) 
     messageDefault = Type'anyPointer'implicitMethodParameter'group'_newtype_ . U'.messageDefault
 get_Type'anyPointer'implicitMethodParameter'parameterIndex :: U'.ReadCtx m msg => Type'anyPointer'implicitMethodParameter'group' msg -> m Word16
 get_Type'anyPointer'implicitMethodParameter'parameterIndex (Type'anyPointer'implicitMethodParameter'group'_newtype_ struct) = H'.getWordField struct 1 16 0
+instance U'.ReadCtx m msg => IsLabel "parameterIndex"(H'.Get (Type'anyPointer'implicitMethodParameter'group' msg -> m Word16)) where
+    fromLabel = H'.Get $ get_Type'anyPointer'implicitMethodParameter'parameterIndex
 set_Type'anyPointer'implicitMethodParameter'parameterIndex :: U'.RWCtx m s => Type'anyPointer'implicitMethodParameter'group' (M'.MutMsg s) -> Word16 -> m ()
 set_Type'anyPointer'implicitMethodParameter'parameterIndex (Type'anyPointer'implicitMethodParameter'group'_newtype_ struct) value = H'.setWordField struct (fromIntegral (C'.toWord value) :: Word16) 1 16 0
 instance C'.FromStruct msg (Type'anyPointer' msg) where
@@ -1849,6 +2047,8 @@ data Type'anyPointer'unconstrained' msg
     | Type'anyPointer'unconstrained'unknown' Word16
 get_Type'anyPointer'unconstrained' :: U'.ReadCtx m msg => Type'anyPointer'unconstrained msg -> m (Type'anyPointer'unconstrained' msg)
 get_Type'anyPointer'unconstrained' (Type'anyPointer'unconstrained_newtype_ struct) = C'.fromStruct struct
+instance U'.ReadCtx m msg => IsLabel ""(H'.Get (Type'anyPointer'unconstrained msg -> m (Type'anyPointer'unconstrained' msg))) where
+    fromLabel = H'.Get $ get_Type'anyPointer'unconstrained'
 set_Type'anyPointer'unconstrained'anyKind :: U'.RWCtx m s => Type'anyPointer'unconstrained (M'.MutMsg s) -> m ()
 set_Type'anyPointer'unconstrained'anyKind (Type'anyPointer'unconstrained_newtype_ struct) = H'.setWordField struct (0 :: Word16) 1 16 0
 set_Type'anyPointer'unconstrained'struct :: U'.RWCtx m s => Type'anyPointer'unconstrained (M'.MutMsg s) -> m ()

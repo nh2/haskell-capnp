@@ -31,6 +31,11 @@ module Data.Capnp
     , Codec.newRoot
     , Codec.setRoot
 
+    -- Accessing fields with OverloadedLabels
+    , Codec.Get(..)
+    , Codec.Set(..)
+    , Codec.Has(..)
+
     -- * Marshalling data into and out of messages
     , Classes.Decerialize(..)
     , Classes.Cerialize(..)
