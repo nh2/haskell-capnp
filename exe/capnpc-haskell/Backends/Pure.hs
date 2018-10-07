@@ -8,7 +8,7 @@ module Backends.Pure
     ) where
 
 import Data.Monoid                  ((<>))
-import Data.String                  (IsString(..))
+import Data.String                  (fromString)
 import GHC.Exts                     (IsList(..))
 import Text.PrettyPrint.Leijen.Text (hcat, vcat)
 import Text.Printf                  (printf)
@@ -17,6 +17,7 @@ import qualified Data.Map.Strict              as M
 import qualified Data.Text                    as T
 import qualified Text.PrettyPrint.Leijen.Text as PP
 
+import Backends.Common
 import Fmt
 import IR
 import Util
@@ -78,6 +79,7 @@ fmtModule mod@Module{modName=Namespace modNameParts,..} =
     , "{-# LANGUAGE ScopedTypeVariables #-}"
     , "{-# LANGUAGE TypeFamilies #-}"
     , "{-# LANGUAGE DeriveGeneric #-}"
+    , "{-# LANGUAGE OverloadedStrings #-}"
     , "{-# OPTIONS_GHC -Wno-unused-imports #-}"
     , "{- |"
     , "Module: " <> humanMod
@@ -98,16 +100,27 @@ fmtModule mod@Module{modName=Namespace modNameParts,..} =
     , "import GHC.Generics (Generic)"
     , ""
     , "import Data.Capnp.Basics.Pure (Data, Text)"
-    , "import Control.Monad.Catch (MonadThrow)"
-    , "import Data.Capnp.TraversalLimit (MonadLimit)"
+    , "import Control.Monad.Catch (MonadThrow(throwM))"
+    , "import Data.Capnp.TraversalLimit (MonadLimit, evalLimitT)"
     , ""
     , "import Control.Monad (forM_)"
     , ""
+    , "import qualified Data.Capnp.Convert as Convert"
     , "import qualified Data.Capnp.Message as M'"
     , "import qualified Data.Capnp.Untyped as U'"
     , "import qualified Data.Capnp.Untyped.Pure as PU'"
     , "import qualified Data.Capnp.GenHelpers.Pure as PH'"
     , "import qualified Data.Capnp.Classes as C'"
+    -- We need to do this conditionally to avoid a circular dependency
+    -- between the rpc system and the generated code for rpc.capnp:
+    , if hasInterfaces mod then
+        vcat
+        [ "import qualified Network.RPC.Capnp as Rpc"
+        , "import qualified Capnp.Capnp.Rpc.Pure as Rpc"
+        , "import qualified Data.Capnp.GenHelpers.Rpc as RH'"
+        ]
+      else
+        ""
     , ""
     , "import qualified Data.Vector as V"
     , "import qualified Data.ByteString as BS"
@@ -128,7 +141,11 @@ fmtExport thisMod (name, DeclDef DefStruct{}) =
     fmtName Pure thisMod name <> "(..)"
 fmtExport thisMod (name, DeclDef DefUnion{}) =
     fmtName Pure thisMod name <> "(..)"
-
+fmtExport thisMod (name, DeclDef (DefInterface _)) = mconcat
+    [ fmtName Pure thisMod name, "(..), "
+    , fmtName Pure thisMod name, "'server_(..),"
+    , "export_", fmtName Pure thisMod name
+    ]
 -- These are 'Raw' because we're just re-exporting them:
 fmtExport thisMod (name, DeclDef DefEnum{}) =
     fmtName Raw thisMod name <> "(..)"
@@ -153,18 +170,12 @@ fmtType thisMod (CompositeType (StructType name params)) =
 fmtType thisMod (WordType (EnumType name)) = fmtName Raw thisMod name
 fmtType thisMod (PtrType (ListOf eltType)) = "PU'.ListOf (" <> fmtType thisMod eltType <> ")"
 fmtType thisMod (PtrType (PtrComposite ty)) = fmtType thisMod (CompositeType ty)
+fmtType thisMod (PtrType (PtrInterface name)) = fmtName Pure thisMod name
 fmtType _ VoidType = "()"
 fmtType _ (WordType (PrimWord prim)) = fmtPrimWord prim
 fmtType _ (PtrType (PrimPtr PrimText)) = "Text"
 fmtType _ (PtrType (PrimPtr PrimData)) = "Data"
 fmtType _ (PtrType (PrimPtr (PrimAnyPtr ty))) = "Maybe (" <> fmtAnyPtr ty <> ")"
-
-fmtPrimWord :: PrimWord -> PP.Doc
-fmtPrimWord PrimInt{isSigned=True,size}  = "Int" <> fromString (show size)
-fmtPrimWord PrimInt{isSigned=False,size} = "Word" <> fromString (show size)
-fmtPrimWord PrimFloat32                  = "Float"
-fmtPrimWord PrimFloat64                  = "Double"
-fmtPrimWord PrimBool                     = "Bool"
 
 fmtAnyPtr :: AnyPtr -> PP.Doc
 fmtAnyPtr Struct = "PU'.Struct"
@@ -214,9 +225,98 @@ fmtConst thisMod name value =
             ]
 
 fmtDataDef :: Id -> Name -> DataDef -> PP.Doc
-fmtDataDef thisMod dataName DefEnum{} =
-    -- We end up re-exporting these, but doing nothing else.
-    ""
+-- We end up re-exporting these, but doing nothing else:
+fmtDataDef thisMod dataName DefEnum{} = ""
+fmtDataDef thisMod dataName (DefInterface InterfaceDef{interfaceId, methods}) =
+    let pureName = fmtName Pure thisMod dataName
+        rawName  = fmtName Raw  thisMod dataName
+        pureValName name = fmtName Pure thisMod (valueName name)
+    in vcat
+    [ hcat [ "newtype ", pureName, " = ", pureName, " M'.Client" ]
+    , "    deriving(Show, Eq, Read, Generic)"
+    , instance_ [] ("C'.Decerialize " <> pureName)
+        [ hcat [ "type Cerial msg ", pureName, " = ", rawName, " msg" ]
+        , hcat [ "decerialize (", rawName, " Nothing) = pure $ ", pureName, " M'.nullClient" ]
+        , hcat [ "decerialize (", rawName, " (Just cap)) = ", pureName, " <$> U'.getClient cap" ]
+        ]
+    , instance_ [] ("C'.Cerialize s " <> pureName)
+        [ hcat [ "cerialize msg (", pureName, " client) = ", rawName, " . Just <$> U'.appendCap msg client" ]
+        ]
+    , hcat [ "class ", pureName, "'server_ cap where" ]
+    , indent $ vcat
+        [ hcat
+            -- We provide default definitions for all methods that just throw
+            -- 'unimplemented', so that if a schema adds new methods, the code
+            -- will still compile and behave the same. But we add a MINIMAL
+            -- pragma so the user will still get a *warning* if they forget
+            -- a method.
+            [ "{-# MINIMAL "
+            , hcat $ PP.punctuate ", " $ map
+                (\Method{methodName} -> pureValName methodName)
+                methods
+            , " #-}"
+            ]
+        , vcat $ flip map methods $ \Method{..} -> vcat
+            [ hcat
+                [ pureValName methodName
+                , " :: "
+                , fmtType thisMod (CompositeType paramType)
+                , " -> cap -> Rpc.RpcT IO ("
+                , fmtType thisMod (CompositeType resultType)
+                , ")"
+                ]
+            , hcat [ pureValName methodName, " _ _ = Rpc.throwMethodUnimplemented" ]
+            ]
+        ]
+    , hcat [ "export_", pureName, " :: ", pureName, "'server_ a => a -> Rpc.RpcT IO ", pureName ]
+    , hcat [ "export_", pureName, " server_ = ", pureName, " <$> Rpc.export Rpc.Server" ]
+    , indent $ vcat
+        [ "{ handleStop = pure () -- TODO"
+        , ", handleCall = \\interfaceId methodId payload -> case interfaceId of"
+        , indent $ vcat
+            -- TODO: superclasses.
+            [ hcat [ fromString (show interfaceId), " -> case methodId of" ]
+            , indent $ vcat
+                [ vcat $ flip map methods $ \Method{..} -> vcat
+                    [ hcat [ fromString (show ordinal), " -> do" ]
+                    , indent $ vcat
+                        [ hcat [ "RH'.handleMethod server_ ", pureValName methodName, " payload" ] ]
+                        -- TODO:
+                        --
+                        -- * handle exceptions
+                    ]
+                , "_ -> Rpc.throwMethodUnimplemented"
+                ]
+            , "_ -> Rpc.throwMethodUnimplemented"
+            ]
+        , "}"
+        ]
+    , instance_ [] (pureName <> "'server_ " <> pureName)
+        $ flip map methods $ \Method{..} -> vcat
+            [ hcat [ pureValName methodName,  " args (", pureName, " client) = do" ]
+            , indent $ vcat
+                -- we're using maxBound as the traversal limit below. This is OK
+                -- because we're only touching values converted from already-validated
+                -- high-level api types that we serailize ourselves, so they can't
+                -- be malicious in the ways that the traversal limit is designed to
+                -- mitiage
+                [ "args' <- evalLimitT maxBound $ PH'.convertValue args"
+                , hcat
+                    [ "resultPromise <- Rpc.call "
+                    , PP.textStrict $ T.pack $ show interfaceId
+                    , " "
+                    , PP.textStrict $ T.pack $ show ordinal
+                    , " Rpc.Payload"
+                    , " { content = Just (PU'.PtrStruct args')"
+                    , " , capTable = V.empty"
+                    , " }"
+                    , " client"
+                    ]
+                , "result <- Rpc.waitIO resultPromise"
+                , "evalLimitT maxBound $ PH'.convertValue result"
+                ]
+            ]
+    ]
 fmtDataDef thisMod dataName dataDef =
     let rawName = fmtName Raw thisMod dataName
         pureName = fmtName Pure thisMod dataName
@@ -224,8 +324,11 @@ fmtDataDef thisMod dataName dataDef =
         unknownName = subName dataName "unknown'"
     in vcat
         [ case dataDef of
+            -- TODO: refactor so we don't need these cases.
             DefEnum{} ->
                 -- TODO: refactor so we don't need this case.
+                error "BUG: this should have been ruled out above."
+            DefInterface _ ->
                 error "BUG: this should have been ruled out above."
             DefStruct StructDef{fields,info} ->
                 let dataVariant =
@@ -387,6 +490,8 @@ fmtDataDef thisMod dataName dataDef =
                 , hcat [ "C'.marshalInto field_ ", fieldNameText ]
                 ]
             PtrField _ ty -> case ty of
+                PtrInterface _ ->
+                    "" -- TODO
                 PrimPtr PrimData -> vcat
                     [ hcat [ "field_ <- ", newName, " (BS.length ", fieldNameText, ") raw" ]
                     , hcat [ "C'.marshalInto field_ ", fieldNameText ]

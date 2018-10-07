@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
@@ -30,3 +31,9 @@ dataFieldSize fieldType = case fieldType of
     PrimWord PrimFloat32 -> 32
     PrimWord PrimFloat64 -> 64
     PrimWord PrimBool    -> 1
+
+-- | Does the module define any interfaces?
+hasInterfaces :: IR.Module -> Bool
+hasInterfaces Module{modDecls} = flip any modDecls $ \case
+    DeclDef (DefInterface _) -> True
+    _ -> False

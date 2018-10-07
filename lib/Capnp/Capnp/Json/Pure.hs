@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-unused-imports #-}
 {- |
 Module: Capnp.Capnp.Json.Pure
@@ -22,9 +23,10 @@ import Data.Word
 import Data.Default (Default(def))
 import GHC.Generics (Generic)
 import Data.Capnp.Basics.Pure (Data, Text)
-import Control.Monad.Catch (MonadThrow)
-import Data.Capnp.TraversalLimit (MonadLimit)
+import Control.Monad.Catch (MonadThrow(throwM))
+import Data.Capnp.TraversalLimit (MonadLimit, evalLimitT)
 import Control.Monad (forM_)
+import qualified Data.Capnp.Convert as Convert
 import qualified Data.Capnp.Message as M'
 import qualified Data.Capnp.Untyped as U'
 import qualified Data.Capnp.Untyped.Pure as PU'

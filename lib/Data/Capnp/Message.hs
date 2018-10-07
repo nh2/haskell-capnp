@@ -17,9 +17,13 @@ module Data.Capnp.Message (
     , putMsg
     , getMsg
 
+    , readMessage
+    , writeMessage
+
     -- * Limits on message size
     , maxSegmentSize
     , maxSegments
+    , maxCaps
 
     -- * Converting between messages and 'ByteString's
     , encode
@@ -35,6 +39,7 @@ module Data.Capnp.Message (
     -- * Reading data from messages
     , getSegment
     , getWord
+    , getCap
 
     -- * Mutable Messages
     , MutMsg
@@ -46,11 +51,18 @@ module Data.Capnp.Message (
     , newSegment
 
     -- ** Modifying messages
-    , setWord
     , setSegment
+    , setWord
+    , setCap
+    , appendCap
 
     , WriteCtx(..)
+
+    , Client
+    , nullClient
     ) where
+
+import {-# SOURCE #-} Network.RPC.Capnp (Client, nullClient)
 
 import Prelude hiding (read)
 
@@ -64,7 +76,6 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer      (execWriterT, tell)
 import Data.Bytes.Get            (getWord32le, runGetS)
 import Data.ByteString.Internal  (ByteString(..))
-import Data.Either               (fromRight)
 import Data.Maybe                (fromJust)
 import Data.Primitive            (MutVar, newMutVar, readMutVar, writeMutVar)
 import Data.Word                 (Word32, Word64)
@@ -81,6 +92,7 @@ import qualified Data.Vector.Storable.Mutable as SMV
 
 import Data.Capnp.Address        (WordAddr(..))
 import Data.Capnp.Bits           (WordCount(..), hi, lo)
+import Data.Capnp.Errors         (Error(InvalidDataError))
 import Data.Capnp.TraversalLimit (LimitT, MonadLimit(invoice), evalLimitT)
 import Data.Mutable              (Mutable(..))
 import Internal.AppendVec        (AppendVec)
@@ -97,6 +109,10 @@ maxSegmentSize = 1 `shiftL` 28 -- 2 GiB.
 maxSegments :: Int
 maxSegments = 1024
 
+-- | The maximum number of capabilities allowed in a message by this library.
+maxCaps :: Int
+maxCaps = 512
+
 -- | A 'Message' is a (possibly read-only) capnproto message. It is
 -- parameterized over a monad in which operations are performed.
 class Monad m => Message m msg where
@@ -105,12 +121,19 @@ class Monad m => Message m msg where
 
     -- | 'numSegs' gets the number of segments in a message.
     numSegs :: msg -> m Int
+    -- | 'numWords' gets the number of words in a segment.
+    numWords :: Segment msg -> m Int
+    -- | 'numCaps' gets the number of capabilities in a message's capability
+    -- table.
+    numCaps :: msg -> m Int
     -- | @'internalGetSeg' message index@ gets the segment at index 'index'
     -- in 'message'. Most callers should use the 'getSegment' wrapper, instead
     -- of calling this directly.
     internalGetSeg :: msg -> Int -> m (Segment msg)
-    -- | Get the length of the segment, in units of 64-bit words.
-    numWords :: Segment msg -> m Int
+    -- | @'internalGetCap' cap index@ reads a capability from the message's
+    -- capability table, returning the client. does not check bounds. Callers
+    -- should use getCap instead.
+    internalGetCap ::msg -> Int -> m Client
     -- | @'slice' start length segment@ extracts a sub-section of the segment,
     -- starting at index @start@, of length @length@.
     slice   :: Int -> Int -> Segment msg -> m (Segment msg)
@@ -129,6 +152,16 @@ getSegment :: (MonadThrow m, Message m msg) => msg -> Int -> m (Segment msg)
 getSegment msg i = do
     checkIndex i =<< numSegs msg
     internalGetSeg msg i
+
+-- | @'getCap' message index@ gets the capability with the given index from
+-- the message. throws 'Data.Capnp.Errors.BoundsError' if the index is out
+-- of bounds.
+getCap :: (MonadThrow m, Message m msg) => msg -> Int -> m Client
+getCap msg i = do
+    ncaps <- numCaps msg
+    if i >= ncaps || i < 0
+        then pure nullClient
+        else msg `internalGetCap` i
 
 -- | @'getWord' msg addr@ returns the word at @addr@ within @msg@. It throws a
 -- @BoundsError@ if the address is out of bounds.
@@ -154,18 +187,45 @@ setWord msg WordAt{wordIndex=WordCount i, segIndex} val = do
     checkIndex i =<< numWords seg
     write seg i val
 
+-- | @'setCap' message index cap@ sets the sets the capability at @index@ in
+-- the message's capability table to @cap@. If the index is out of bounds, a
+-- 'Data.Capnp.Errors.BoundsError' will be thrown.
+setCap :: (WriteCtx m s, MonadThrow m) => MutMsg s -> Int -> Client -> m ()
+setCap msg@MutMsg{mutCaps} i cap = do
+    checkIndex i =<< numCaps msg
+    capTable <- AppendVec.getVector <$> readMutVar mutCaps
+    MV.write capTable i cap
+
+-- | 'appendCap' appends a new capabilty to the end of a message's capability
+-- table, returning its index.
+appendCap :: WriteCtx m s => MutMsg s -> Client -> m Int
+appendCap msg@MutMsg{mutCaps} cap = do
+    i <- numCaps msg
+    capTable <- readMutVar mutCaps
+    capTable <- AppendVec.grow capTable 1 maxCaps
+    writeMutVar mutCaps capTable
+    setCap msg i cap
+    pure i
+
 -- | A read-only capnproto message.
 --
 -- 'ConstMsg' is an instance of the generic 'Message' type class. its
 -- implementations of 'toByteString' and 'fromByteString' are O(1);
 -- the underlying bytes are not copied.
-newtype ConstMsg = ConstMsg (V.Vector (Segment ConstMsg))
+data ConstMsg = ConstMsg
+    { constSegs :: V.Vector (Segment ConstMsg)
+    , constCaps :: V.Vector Client
+    }
+    deriving(Eq)
 
 instance Monad m => Message m ConstMsg where
     newtype Segment ConstMsg = ConstSegment { constSegToVec :: SV.Vector Word64 }
+        deriving(Eq)
 
-    numSegs (ConstMsg vec) = pure $ V.length vec
-    internalGetSeg (ConstMsg vec) i = vec `V.indexM` i
+    numSegs ConstMsg{constSegs} = pure $ V.length constSegs
+    numCaps ConstMsg{constCaps} = pure $ V.length constCaps
+    internalGetSeg ConstMsg{constSegs} i = constSegs `V.indexM` i
+    internalGetCap ConstMsg{constCaps} i = constCaps `V.indexM` i
 
     numWords (ConstSegment vec) = pure $ SV.length vec
     slice start len (ConstSegment vec) = pure $ ConstSegment (SV.slice start len vec)
@@ -244,18 +304,19 @@ readMessage read32 readSegment = do
     segSizes <- V.replicateM (fromIntegral numSegs) read32
     when (numSegs `mod` 2 == 0) $ void read32
     V.mapM_ (invoice . fromIntegral) segSizes
-    ConstMsg <$> V.mapM (readSegment . fromIntegral) segSizes
+    constSegs <- V.mapM (readSegment . fromIntegral) segSizes
+    pure ConstMsg{constSegs, constCaps = V.empty}
 
 -- | @'writeMesage' write32 writeSegment@ writes out the message. @write32@
 -- should write a 32-bit word in little-endian format to the output stream.
 -- @writeSegment@ should write a blob.
 writeMessage :: MonadThrow m => ConstMsg -> (Word32 -> m ()) -> (Segment ConstMsg -> m ()) -> m ()
-writeMessage (ConstMsg segs) write32 writeSegment = do
-    let numSegs = V.length segs
+writeMessage ConstMsg{constSegs} write32 writeSegment = do
+    let numSegs = V.length constSegs
     write32 (fromIntegral numSegs - 1)
-    V.forM_ segs $ \seg -> write32 =<< fromIntegral <$> numWords seg
+    V.forM_ constSegs $ \seg -> write32 =<< fromIntegral <$> numWords seg
     when (numSegs `mod` 2 == 0) $ write32 0
-    V.forM_ segs writeSegment
+    V.forM_ constSegs writeSegment
 
 
 -- | @'hPutMsg' handle msg@ writes @msg@ to @handle@. If there is an exception,
@@ -276,9 +337,12 @@ hGetMsg handle size =
     read32 :: LimitT IO Word32
     read32 = lift $ do
         bytes <- BS.hGet handle 4
-        -- The only way we get a left is if we get less than 4 bytes, in which
-        -- case hGet should have thrown:
-        pure $ fromRight (error "impossible") (runGetS getWord32le bytes)
+        case runGetS getWord32le bytes of
+            Left _ ->
+                -- the only way this can happen is if we get < 4 bytes.
+                throwM $ InvalidDataError "Unexpected end of input"
+            Right result ->
+                pure result
     readSegment n = lift $ BS.hGet handle (fromIntegral n * 8) >>= fromByteString
 
 -- | Equivalent to @'hGetMsg' 'stdin'@
@@ -291,7 +355,10 @@ getMsg = hGetMsg stdin
 --
 -- Due to mutabilty, the implementations of 'toByteString' and 'fromByteString'
 -- must make full copies, and so are O(n) in the length of the segment.
-newtype MutMsg s = MutMsg (MutVar s (AppendVec MV.MVector s (Segment (MutMsg s))))
+data MutMsg s = MutMsg
+    { mutSegs :: MutVar s (AppendVec MV.MVector s (Segment (MutMsg s)))
+    , mutCaps :: MutVar s (AppendVec MV.MVector s Client)
+    }
     deriving(Eq)
 
 -- | 'WriteCtx' is the context needed for most write operations.
@@ -312,18 +379,22 @@ instance (PrimMonad m, s ~ PrimState m) => Message m (MutMsg s) where
         seg <- freeze mseg
         toByteString (seg :: Segment ConstMsg)
 
-    numSegs (MutMsg segVar) = GMV.length . AppendVec.getVector <$> readMutVar segVar
-    internalGetSeg (MutMsg segVar) i = do
-        segs <- AppendVec.getVector <$> readMutVar segVar
+    numSegs MutMsg{mutSegs} = GMV.length . AppendVec.getVector <$> readMutVar mutSegs
+    numCaps MutMsg{mutCaps} = GMV.length . AppendVec.getVector <$> readMutVar mutCaps
+    internalGetSeg MutMsg{mutSegs} i = do
+        segs <- AppendVec.getVector <$> readMutVar mutSegs
         MV.read segs i
+    internalGetCap MutMsg{mutCaps} i = do
+        caps <- AppendVec.getVector <$> readMutVar mutCaps
+        MV.read caps i
 
 
 -- | @'internalSetSeg' message index segment@ sets the segment at the given
 -- index in the message. Most callers should use the 'setSegment' wrapper,
 -- instead of calling this directly.
 internalSetSeg :: WriteCtx m s => MutMsg s -> Int -> Segment (MutMsg s) -> m ()
-internalSetSeg (MutMsg segVar) segIndex seg = do
-    segs <- AppendVec.getVector <$> readMutVar segVar
+internalSetSeg MutMsg{mutSegs} segIndex seg = do
+    segs <- AppendVec.getVector <$> readMutVar mutSegs
     MV.write segs segIndex seg
 
 -- | @'write' segment index value@ writes a value to the 64-bit word
@@ -343,15 +414,15 @@ grow (MutSegment vec) amount =
 -- @msg@ with a capacity of @sizeHint@. It returns the a pair of the segment
 -- number and the segment itself. Amortized O(1).
 newSegment :: WriteCtx m s => MutMsg s -> Int -> m (Int, Segment (MutMsg s))
-newSegment msg@(MutMsg segVar) sizeHint = do
+newSegment msg@MutMsg{mutSegs} sizeHint = do
     -- the next segment number will be equal to the *current* number of
     -- segments:
     segIndex <- numSegs msg
 
     -- make space for th new segment
-    segs <- readMutVar segVar
+    segs <- readMutVar mutSegs
     segs <- AppendVec.grow segs 1 maxSegments
-    writeMutVar segVar segs
+    writeMutVar mutSegs segs
 
     newSeg <- MutSegment . AppendVec.makeEmpty <$> SMV.new sizeHint
     setSegment msg segIndex newSeg
@@ -380,7 +451,10 @@ alloc msg size = do
 -- | 'empty' is an empty message, i.e. a minimal message with a null pointer as
 -- its root object.
 empty :: ConstMsg
-empty = ConstMsg $ V.fromList [ ConstSegment $ SV.fromList [0] ]
+empty = ConstMsg
+    { constSegs = V.fromList [ ConstSegment $ SV.fromList [0] ]
+    , constCaps = V.empty
+    }
 
 -- | Allocate a new empty message.
 newMessage :: WriteCtx m s => m (MutMsg s)
@@ -403,15 +477,28 @@ freezeSeg freeze (MutSegment mvec) =
 instance Thaw ConstMsg where
     type Mutable s ConstMsg = MutMsg s
 
-    thaw         = thawMsg   thaw
-    unsafeThaw   = thawMsg   unsafeThaw
-    freeze       = freezeMsg freeze
-    unsafeFreeze = freezeMsg unsafeFreeze
+    thaw         = thawMsg   thaw         V.thaw
+    unsafeThaw   = thawMsg   unsafeThaw   V.unsafeThaw
+    freeze       = freezeMsg freeze       V.freeze
+    unsafeFreeze = freezeMsg unsafeFreeze V.unsafeFreeze
 
 -- Helpers for ConstMsg's Thaw instance.
-thawMsg thaw (ConstMsg vec) = do
-    segments <- V.mapM thaw vec >>= V.unsafeThaw
-    MutMsg <$> newMutVar (AppendVec.fromVector segments)
-freezeMsg freeze msg = do
+thawMsg :: (PrimMonad m, s ~ PrimState m)
+    => (Segment ConstMsg -> m (Segment (MutMsg s)))
+    -> (V.Vector Client -> m (MV.MVector s Client))
+    -> ConstMsg
+    -> m (MutMsg s)
+thawMsg thawSeg thawCaps ConstMsg{constSegs, constCaps}= do
+    mutSegs <- newMutVar . AppendVec.fromVector =<< (V.mapM thawSeg constSegs >>= V.unsafeThaw)
+    mutCaps <- newMutVar . AppendVec.fromVector =<< thawCaps constCaps
+    pure MutMsg{mutSegs, mutCaps}
+freezeMsg :: (PrimMonad m, s ~ PrimState m)
+    => (Segment (MutMsg s) -> m (Segment ConstMsg))
+    -> (MV.MVector s Client -> m (V.Vector Client))
+    -> MutMsg s
+    -> m ConstMsg
+freezeMsg freezeSeg freezeCaps msg@MutMsg{mutCaps} = do
     len <- numSegs msg
-    ConstMsg <$> V.generateM len (internalGetSeg msg >=> freeze)
+    constSegs <- V.generateM len (internalGetSeg msg >=> freeze)
+    constCaps <- freezeCaps . AppendVec.getVector =<< readMutVar mutCaps
+    pure ConstMsg{constSegs, constCaps}

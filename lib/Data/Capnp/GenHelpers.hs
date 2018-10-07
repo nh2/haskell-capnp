@@ -62,6 +62,10 @@ setWordField struct value idx offset def = do
     let new = replaceBits (value `xor` def) old offset
     U.setData new idx struct
 
+embedCapPtr :: M.WriteCtx m s => M.MutMsg s -> M.Client -> m (Maybe (U.Ptr (M.MutMsg s)))
+embedCapPtr msg client =
+    Just . U.PtrCap <$> U.appendCap msg client
+
 -- | Get a pointer from a ByteString, where the root object is a struct with
 -- one pointer, which is the pointer we will retrieve. This is only safe for
 -- trusted inputs; it reads the message with a traversal limit of 'maxBound'

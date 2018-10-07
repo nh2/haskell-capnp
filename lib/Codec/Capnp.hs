@@ -8,6 +8,7 @@ module Codec.Capnp
     , Get(..)
     , Set(..)
     , Has(..)
+    , encodeV
     ) where
 
 import Data.Capnp.Classes
@@ -35,3 +36,17 @@ getRoot msg = U.rootPtr msg >>= fromStruct
 newtype Get a = Get { get :: a }
 newtype Set a = Set { set :: a }
 newtype Has a = Has { has :: a }
+
+-- | Convert a value to it's serialized form, as the root object of its
+-- message.
+encodeV ::
+    ( U.RWCtx m s
+    , Cerialize s a
+    , ToStruct (M.MutMsg s) (Cerial (M.MutMsg s) a)
+    ) =>
+    a -> m (Cerial (M.MutMsg s) a)
+encodeV value = do
+    msg <- M.newMessage
+    cerial <- cerialize msg value
+    setRoot cerial
+    pure cerial

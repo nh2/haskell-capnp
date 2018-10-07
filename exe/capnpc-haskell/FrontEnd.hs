@@ -1,7 +1,8 @@
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
 module FrontEnd
     ( cgrToIR
     ) where
@@ -41,17 +42,17 @@ data NodeMetaData = NodeMetaData
     }
     deriving(Show, Read, Eq)
 
--- | @'identifierFromMetaData' thisModule meta@ return a haskell identifier
+-- | @'identifierFromMetaData' meta@ return a haskell identifier
 -- for a node based on the metadata @meta@, and @thisModule@, the id for
 -- the module in which the name will be used.
-identifierFromMetaData :: Id -> NodeMetaData -> IR.Name
-identifierFromMetaData _ NodeMetaData{moduleId, namespace=(unqualified:localNS)} =
+identifierFromMetaData :: NodeMetaData -> IR.Name
+identifierFromMetaData NodeMetaData{moduleId, namespace=(unqualified:localNS)} =
     IR.Name
         { nameModule = IR.ByCapnpId moduleId
         , nameLocalNS = IR.Namespace $ reverse localNS
         , nameUnqualified = unqualified
         }
-identifierFromMetaData _ meta =
+identifierFromMetaData meta =
     -- TODO: rule out this possibility statically; shouldn't be too hard.
     error $ "Node metadata had an empty namespace field: " ++ show meta
 
@@ -61,12 +62,17 @@ collectMetaData :: M.Map Id Node -> NodeMetaData -> [(Id, NodeMetaData)]
 collectMetaData nodeMap meta@NodeMetaData{node=node@Node{..}, ..} = concat
     [ [(id, meta)]
     , concatMap collectNested $ V.toList nestedNodes
-    -- Child nodes can be in two places: most are in nestedNodes, but
-    -- group fields are not, and can only be found in the fields of
-    -- a struct union.
     , case union' of
             Node'struct{..} ->
+                -- Child field nodes can be in two places: most are in nestedNodes,
+                -- but group fields are not, and can only be found in the fields of
+                -- a struct union.
                 concatMap collectField $ V.toList fields
+            Node'interface{..} ->
+                -- If the interface has methods with anonymous parameter or result
+                -- types, we need to collect them, since they aren't otherwise
+                -- reachable.
+                concatMap collectMethod $ V.toList methods
             _ ->
                 []
     ]
@@ -82,6 +88,25 @@ collectMetaData nodeMap meta@NodeMetaData{node=node@Node{..}, ..} = concat
                 }
         _ ->
             []
+    -- Collect metadata for nodes under a Method.
+    collectMethod Method{..} =
+        collectMethodStruct name paramStructType "params" ++
+        collectMethodStruct name resultStructType "results"
+
+    -- Collect metadata for a struct that is a method parameter or result.
+    collectMethodStruct name nodeId paramOrResult = case M.lookup nodeId nodeMap of
+        Just node@Node{scopeId} | scopeId == 0 ->
+            -- This is an anonymous struct; generate a node with a name for it.
+            collectMetaData nodeMap NodeMetaData
+                { namespace = paramOrResult : name : namespace
+                , node
+                , moduleId
+                }
+        _ ->
+            -- This isn't an anonymous struct; it will get picked up somewhere
+            -- else.
+            []
+
     -- Collect metadata for nodes under a NestedNode.
     collectNested nn@Node'NestedNode{..} = case M.lookup id nodeMap of
         Just node -> collectMetaData nodeMap
@@ -123,7 +148,11 @@ makeNodeMap CodeGeneratorRequest{..} =
     & concat
     & M.fromList
   where
-    rootNodes = V.filter (\Node{..} -> scopeId == 0) nodes
+    rootNodes = nodes & V.filter (\case
+        Node{union'=Node'file, scopeId=0} ->
+            True
+        _ ->
+            False)
     baseMap =
         V.toList nodes
         & map (\node@Node{..} -> (id, node))
@@ -185,10 +214,34 @@ neededByParent nodeMap Node{id,scopeId,union'=Node'struct{isGroup,discriminantCo
         _ -> error "Invalid schema; group's scopeId references something that is not a struct!"
 neededByParent _ _ = True
 
+generateMethodStructs :: Id -> NodeMap -> Method -> [(IR.Name, IR.Decl)]
+generateMethodStructs thisMod nodeMap Method{..} =
+    go paramStructType ++ go resultStructType
+  where
+    go structId = case M.lookup structId nodeMap of
+        Just meta@NodeMetaData{node=Node{id,scopeId}} | scopeId == 0 ->
+            -- anonymous struct; this isn't reachable from anywhere else.
+            generateDecls thisMod (M.insert id meta nodeMap) meta
+        _ ->
+            -- not an anonymous struct; will be taken care of elsewhere.
+            []
+
+generateMethod :: Id -> NodeMap -> IR.Name -> Word16 -> Method -> IR.Method
+generateMethod thisMod nodeMap parentName ordinal Method{..} =
+    IR.Method
+        { methodName = IR.subName parentName name
+        , ordinal = ordinal
+        , paramType = typeFromId paramStructType
+        , resultType = typeFromId resultStructType
+        }
+  where
+    typeFromId typeId =
+        IR.StructType (identifierFromMetaData (nodeMap M.! typeId)) []
+
 generateDecls :: Id -> NodeMap -> NodeMetaData -> [(IR.Name, IR.Decl)]
 generateDecls thisModule nodeMap meta@NodeMetaData{..} =
     let Node{..} = node
-        name = identifierFromMetaData moduleId meta
+        name = identifierFromMetaData meta
     in case union' of
         Node'struct{..} | neededByParent nodeMap node ->
             let allFields = V.toList fields
@@ -242,6 +295,17 @@ generateDecls thisModule nodeMap meta@NodeMetaData{..} =
                     [ ( typeName, bodyFields )
                     , ( unionName, bodyUnion )
                     ]
+        Node'interface{..} ->
+            ( name
+            , IR.DeclDef $ IR.DefInterface $ IR.InterfaceDef
+                { interfaceId = id
+                , methods = zipWith
+                    (generateMethod thisModule nodeMap name)
+                    [0..] (V.toList
+                    methods)
+                }
+            )
+            : concatMap (generateMethodStructs thisModule nodeMap) methods
         Node'enum{..} ->
             [ ( name
               , IR.DeclDef $ IR.DefEnum $ map
@@ -310,7 +374,7 @@ generateDecls thisModule nodeMap meta@NodeMetaData{..} =
             [ ( name
               , IR.DeclConst IR.WordConst
                 { wordValue = fromIntegral v
-                , wordType = IR.EnumType $ identifierFromMetaData thisModule (nodeMap M.! typeId)
+                , wordType = IR.EnumType $ identifierFromMetaData (nodeMap M.! typeId)
                 }
               )
             ]
@@ -319,7 +383,7 @@ generateDecls thisModule nodeMap meta@NodeMetaData{..} =
             [ ( name
               , IR.DeclConst IR.PtrConst
                 { ptrType = IR.PtrComposite $ IR.StructType
-                    (identifierFromMetaData thisModule (nodeMap M.! typeId))
+                    (identifierFromMetaData (nodeMap M.! typeId))
                     []
                 , ptrValue = v
                 }
@@ -465,7 +529,7 @@ getFieldLoc thisModule nodeMap = \case
             IR.CompositeType ty ->
                 IR.PtrField (fromIntegral offset) (IR.PtrComposite ty)
     Field'group{..} ->
-        IR.HereField $ IR.StructType (identifierFromMetaData thisModule (nodeMap M.! typeId)) []
+        IR.HereField $ IR.StructType (identifierFromMetaData (nodeMap M.! typeId)) []
     Field'unknown' _ ->
         -- Don't know how to interpret this; we'll have to leave the argument
         -- opaque.
@@ -512,8 +576,7 @@ formatType thisModule nodeMap ty = case ty of
     -- TODO: use 'brand' to generate type parameters.
     Type'enum{..}   -> IR.WordType $ IR.EnumType (typeName typeId)
     Type'struct{..} -> IR.CompositeType $ IR.StructType (typeName typeId) []
-    -- TODO: interfaces are not structs; handle them separately.
-    Type'interface{..} -> IR.CompositeType $ IR.StructType (typeName typeId) []
+    Type'interface{..} -> IR.PtrType $ IR.PtrInterface (typeName typeId)
     Type'anyPointer anyPtr -> IR.PtrType $ IR.PrimPtr $ IR.PrimAnyPtr $
         case anyPtr of
             Type'anyPointer'unconstrained Type'anyPointer'unconstrained'anyKind ->
@@ -530,7 +593,7 @@ formatType thisModule nodeMap ty = case ty of
     _ -> IR.VoidType -- TODO: constrained anyPointers
   where
     typeName typeId =
-        identifierFromMetaData thisModule (nodeMap M.! typeId)
+        identifierFromMetaData (nodeMap M.! typeId)
 
 generateImport :: CodeGeneratorRequest'RequestedFile'Import -> IR.Import
 generateImport CodeGeneratorRequest'RequestedFile'Import{..} =

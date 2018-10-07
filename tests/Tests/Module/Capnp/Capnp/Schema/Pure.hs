@@ -484,6 +484,7 @@ prop_hGetPutInverses proxy expected = propertyIO $ do
             withBinaryFile filename ReadMode $ \h ->
                 hGetValue h defaultLimit)
     ppAssertEqual actual expected
+
 prop_cerializeDecerializeInverses ::
     ( Show a
     , Eq a
