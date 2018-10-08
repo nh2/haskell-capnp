@@ -78,6 +78,8 @@ set_Persistent'SaveParams'sealFor :: U'.RWCtx m s => Persistent'SaveParams (M'.M
 set_Persistent'SaveParams'sealFor (Persistent'SaveParams_newtype_ struct) value = do
     ptr <- C'.toPtr (U'.message struct) value
     U'.setPtr ptr 0 struct
+instance U'.RWCtx m s => IsLabel "sealFor" (H'.Set (Persistent'SaveParams (M'.MutMsg s) -> (Maybe (U'.Ptr (M'.MutMsg s))) -> m ())) where
+    fromLabel = H'.Set set_Persistent'SaveParams'sealFor
 newtype Persistent'SaveResults msg = Persistent'SaveResults_newtype_ (U'.Struct msg)
 instance C'.FromStruct msg (Persistent'SaveResults msg) where
     fromStruct = pure . Persistent'SaveResults_newtype_
@@ -117,6 +119,8 @@ set_Persistent'SaveResults'sturdyRef :: U'.RWCtx m s => Persistent'SaveResults (
 set_Persistent'SaveResults'sturdyRef (Persistent'SaveResults_newtype_ struct) value = do
     ptr <- C'.toPtr (U'.message struct) value
     U'.setPtr ptr 0 struct
+instance U'.RWCtx m s => IsLabel "sturdyRef" (H'.Set (Persistent'SaveResults (M'.MutMsg s) -> (Maybe (U'.Ptr (M'.MutMsg s))) -> m ())) where
+    fromLabel = H'.Set set_Persistent'SaveResults'sturdyRef
 newtype RealmGateway'export'params msg = RealmGateway'export'params_newtype_ (U'.Struct msg)
 instance C'.FromStruct msg (RealmGateway'export'params msg) where
     fromStruct = pure . RealmGateway'export'params_newtype_
@@ -156,6 +160,8 @@ set_RealmGateway'export'params'cap :: U'.RWCtx m s => RealmGateway'export'params
 set_RealmGateway'export'params'cap (RealmGateway'export'params_newtype_ struct) value = do
     ptr <- C'.toPtr (U'.message struct) value
     U'.setPtr ptr 0 struct
+instance U'.RWCtx m s => IsLabel "cap" (H'.Set (RealmGateway'export'params (M'.MutMsg s) -> (Persistent (M'.MutMsg s)) -> m ())) where
+    fromLabel = H'.Set set_RealmGateway'export'params'cap
 get_RealmGateway'export'params'params :: U'.ReadCtx m msg => RealmGateway'export'params msg -> m (Persistent'SaveParams msg)
 get_RealmGateway'export'params'params (RealmGateway'export'params_newtype_ struct) =
     U'.getPtr 1 struct
@@ -170,6 +176,8 @@ set_RealmGateway'export'params'params :: U'.RWCtx m s => RealmGateway'export'par
 set_RealmGateway'export'params'params (RealmGateway'export'params_newtype_ struct) value = do
     ptr <- C'.toPtr (U'.message struct) value
     U'.setPtr ptr 1 struct
+instance U'.RWCtx m s => IsLabel "params" (H'.Set (RealmGateway'export'params (M'.MutMsg s) -> (Persistent'SaveParams (M'.MutMsg s)) -> m ())) where
+    fromLabel = H'.Set set_RealmGateway'export'params'params
 new_RealmGateway'export'params'params :: U'.RWCtx m s => RealmGateway'export'params (M'.MutMsg s) -> m ((Persistent'SaveParams (M'.MutMsg s)))
 new_RealmGateway'export'params'params struct = do
     result <- C'.new (U'.message struct)
@@ -214,6 +222,8 @@ set_RealmGateway'import'params'cap :: U'.RWCtx m s => RealmGateway'import'params
 set_RealmGateway'import'params'cap (RealmGateway'import'params_newtype_ struct) value = do
     ptr <- C'.toPtr (U'.message struct) value
     U'.setPtr ptr 0 struct
+instance U'.RWCtx m s => IsLabel "cap" (H'.Set (RealmGateway'import'params (M'.MutMsg s) -> (Persistent (M'.MutMsg s)) -> m ())) where
+    fromLabel = H'.Set set_RealmGateway'import'params'cap
 get_RealmGateway'import'params'params :: U'.ReadCtx m msg => RealmGateway'import'params msg -> m (Persistent'SaveParams msg)
 get_RealmGateway'import'params'params (RealmGateway'import'params_newtype_ struct) =
     U'.getPtr 1 struct
@@ -228,6 +238,8 @@ set_RealmGateway'import'params'params :: U'.RWCtx m s => RealmGateway'import'par
 set_RealmGateway'import'params'params (RealmGateway'import'params_newtype_ struct) value = do
     ptr <- C'.toPtr (U'.message struct) value
     U'.setPtr ptr 1 struct
+instance U'.RWCtx m s => IsLabel "params" (H'.Set (RealmGateway'import'params (M'.MutMsg s) -> (Persistent'SaveParams (M'.MutMsg s)) -> m ())) where
+    fromLabel = H'.Set set_RealmGateway'import'params'params
 new_RealmGateway'import'params'params :: U'.RWCtx m s => RealmGateway'import'params (M'.MutMsg s) -> m ((Persistent'SaveParams (M'.MutMsg s)))
 new_RealmGateway'import'params'params struct = do
     result <- C'.new (U'.message struct)

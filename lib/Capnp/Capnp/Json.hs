@@ -170,6 +170,8 @@ set_JsonValue'Call'function :: U'.RWCtx m s => JsonValue'Call (M'.MutMsg s) -> (
 set_JsonValue'Call'function (JsonValue'Call_newtype_ struct) value = do
     ptr <- C'.toPtr (U'.message struct) value
     U'.setPtr ptr 0 struct
+instance U'.RWCtx m s => IsLabel "function" (H'.Set (JsonValue'Call (M'.MutMsg s) -> (B'.Text (M'.MutMsg s)) -> m ())) where
+    fromLabel = H'.Set set_JsonValue'Call'function
 new_JsonValue'Call'function :: U'.RWCtx m s => Int -> JsonValue'Call (M'.MutMsg s) -> m ((B'.Text (M'.MutMsg s)))
 new_JsonValue'Call'function len struct = do
     result <- B'.newText (U'.message struct) len
@@ -189,6 +191,8 @@ set_JsonValue'Call'params :: U'.RWCtx m s => JsonValue'Call (M'.MutMsg s) -> (B'
 set_JsonValue'Call'params (JsonValue'Call_newtype_ struct) value = do
     ptr <- C'.toPtr (U'.message struct) value
     U'.setPtr ptr 1 struct
+instance U'.RWCtx m s => IsLabel "params" (H'.Set (JsonValue'Call (M'.MutMsg s) -> (B'.List (M'.MutMsg s) (JsonValue (M'.MutMsg s))) -> m ())) where
+    fromLabel = H'.Set set_JsonValue'Call'params
 new_JsonValue'Call'params :: U'.RWCtx m s => Int -> JsonValue'Call (M'.MutMsg s) -> m ((B'.List (M'.MutMsg s) (JsonValue (M'.MutMsg s))))
 new_JsonValue'Call'params len struct = do
     result <- C'.newList (U'.message struct) len
@@ -233,6 +237,8 @@ set_JsonValue'Field'name :: U'.RWCtx m s => JsonValue'Field (M'.MutMsg s) -> (B'
 set_JsonValue'Field'name (JsonValue'Field_newtype_ struct) value = do
     ptr <- C'.toPtr (U'.message struct) value
     U'.setPtr ptr 0 struct
+instance U'.RWCtx m s => IsLabel "name" (H'.Set (JsonValue'Field (M'.MutMsg s) -> (B'.Text (M'.MutMsg s)) -> m ())) where
+    fromLabel = H'.Set set_JsonValue'Field'name
 new_JsonValue'Field'name :: U'.RWCtx m s => Int -> JsonValue'Field (M'.MutMsg s) -> m ((B'.Text (M'.MutMsg s)))
 new_JsonValue'Field'name len struct = do
     result <- B'.newText (U'.message struct) len
@@ -252,6 +258,8 @@ set_JsonValue'Field'value :: U'.RWCtx m s => JsonValue'Field (M'.MutMsg s) -> (J
 set_JsonValue'Field'value (JsonValue'Field_newtype_ struct) value = do
     ptr <- C'.toPtr (U'.message struct) value
     U'.setPtr ptr 1 struct
+instance U'.RWCtx m s => IsLabel "value" (H'.Set (JsonValue'Field (M'.MutMsg s) -> (JsonValue (M'.MutMsg s)) -> m ())) where
+    fromLabel = H'.Set set_JsonValue'Field'value
 new_JsonValue'Field'value :: U'.RWCtx m s => JsonValue'Field (M'.MutMsg s) -> m ((JsonValue (M'.MutMsg s)))
 new_JsonValue'Field'value struct = do
     result <- C'.new (U'.message struct)

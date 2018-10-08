@@ -295,6 +295,11 @@ fmtFieldAccessor thisMod typeName variantName Field{..} = vcat
     fmtSetter =
         let setType fieldType = typeCon <> " (M'.MutMsg s) -> " <> fmtType thisMod "(M'.MutMsg s)" fieldType <> " -> m ()"
             typeAnnotation fieldType = setName <> " :: U'.RWCtx m s => " <> setType fieldType
+            isLabelInstance fieldType =
+                instance_ [ "U'.RWCtx m s" ]
+                        (hcat [ "IsLabel ", fromString (show fieldName), " (H'.Set (", setType fieldType, "))" ])
+                        [ hcat [ "fromLabel = H'.Set ", setName ]
+                        ]
         in
         case fieldLocType of
             DataField loc@DataLoc{..} ty -> vcat
@@ -306,10 +311,12 @@ fmtFieldAccessor thisMod typeName variantName Field{..} = vcat
                         ("(fromIntegral (C'.toWord value) :: Word" <> fromString (show $ dataFieldSize ty) <> ")")
                         loc
                     ]
+                , isLabelInstance (WordType ty)
                 ]
             VoidField -> vcat
                 [ typeAnnotation VoidType
                 , setName <> " _ = pure ()"
+                , isLabelInstance VoidType
                 ]
             PtrField idx ty -> vcat
                 [ typeAnnotation (PtrType ty)
@@ -318,6 +325,7 @@ fmtFieldAccessor thisMod typeName variantName Field{..} = vcat
                     [ "ptr <- C'.toPtr (U'.message struct) value"
                     , hcat [ "U'.setPtr ptr ", fromString (show idx), " struct" ]
                     ]
+                , isLabelInstance (PtrType ty)
                 ]
             HereField _ ->
                 -- We don't generate setters for these fields; instead, the
