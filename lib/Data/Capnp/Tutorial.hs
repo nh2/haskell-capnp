@@ -198,7 +198,7 @@ message to standard output using the high-level API like so:
 > import Capnp.Addressbook.Pure
 >
 > -- Note that Data.Capnp re-exports `def`, as a convienence
-> import Data.Capnp (putValue, def)
+> import Data.Capnp (def, putValue)
 >
 > import qualified Data.Vector as V
 >
@@ -240,11 +240,9 @@ to write to an arbitrary handle.
 
 We can use 'getValue' (or alternately 'hGetValue') to read in a message:
 
-> -- ...
+> import Capnp.Addressbook.Pure
 >
-> import Data.Capnp (getValue, defaultLimit)
->
-> -- ...
+> import Data.Capnp (defaultLimit, getValue)
 >
 > main = do
 >     value <- getValue defaultLimit
@@ -388,8 +386,9 @@ The snippet below prints the names of each person in the address book:
 > import Data.Capnp
 >     (ConstMsg, defaultLimit, evalLimitT, getValue, index, length, textBytes)
 >
-> import           Control.Monad         (forM_)
-> import           Control.Monad.Trans   (lift)
+> import Control.Monad             (forM_)
+> import Control.Monad.Trans.Class (lift)
+>
 > import qualified Data.ByteString.Char8 as BS8
 >
 > main = do
