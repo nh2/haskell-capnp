@@ -1,4 +1,4 @@
-cabal-version: 2.0
+cabal-version: 2.2
 name:                capnp-examples
 version:             0.1.0.0
 synopsis:            Examples for haskell-capnp
@@ -31,3 +31,36 @@ executable echo-demo
     , network-simple ^>= 0.4
   -- hs-source-dirs:
   default-language:    Haskell2010
+
+common addressbook
+  other-modules:
+      Capnp.Addressbook
+    , Capnp.Addressbook.Pure
+    , Capnp.ById.Xcd6db6afb4a0cf5c.Pure
+    , Capnp.ById.Xcd6db6afb4a0cf5c
+  build-depends:
+      base ^>=4.11
+    , capnp
+    , bytestring
+    , data-default
+    , exceptions
+    , text
+    , transformers
+    , vector
+  default-language:    Haskell2010
+
+executable high-level-write
+  import: addressbook
+  main-is: HighLevelWrite.hs
+
+executable high-level-read
+  import: addressbook
+  main-is: HighLevelRead.hs
+
+executable low-level-write
+  import: addressbook
+  main-is: LowLevelWrite.hs
+
+executable low-level-read
+  import: addressbook
+  main-is: LowLevelRead.hs

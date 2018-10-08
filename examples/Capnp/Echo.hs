@@ -72,6 +72,8 @@ set_Echo'echo'params'query :: U'.RWCtx m s => Echo'echo'params (M'.MutMsg s) -> 
 set_Echo'echo'params'query (Echo'echo'params_newtype_ struct) value = do
     ptr <- C'.toPtr (U'.message struct) value
     U'.setPtr ptr 0 struct
+instance U'.RWCtx m s => IsLabel "query" (H'.Set (Echo'echo'params (M'.MutMsg s) -> (B'.Text (M'.MutMsg s)) -> m ())) where
+    fromLabel = H'.Set set_Echo'echo'params'query
 new_Echo'echo'params'query :: U'.RWCtx m s => Int -> Echo'echo'params (M'.MutMsg s) -> m ((B'.Text (M'.MutMsg s)))
 new_Echo'echo'params'query len struct = do
     result <- B'.newText (U'.message struct) len
@@ -116,6 +118,8 @@ set_Echo'echo'results'reply :: U'.RWCtx m s => Echo'echo'results (M'.MutMsg s) -
 set_Echo'echo'results'reply (Echo'echo'results_newtype_ struct) value = do
     ptr <- C'.toPtr (U'.message struct) value
     U'.setPtr ptr 0 struct
+instance U'.RWCtx m s => IsLabel "reply" (H'.Set (Echo'echo'results (M'.MutMsg s) -> (B'.Text (M'.MutMsg s)) -> m ())) where
+    fromLabel = H'.Set set_Echo'echo'results'reply
 new_Echo'echo'results'reply :: U'.RWCtx m s => Int -> Echo'echo'results (M'.MutMsg s) -> m ((B'.Text (M'.MutMsg s)))
 new_Echo'echo'results'reply len struct = do
     result <- B'.newText (U'.message struct) len

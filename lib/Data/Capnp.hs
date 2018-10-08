@@ -72,7 +72,8 @@ import Data.Capnp.IO
 import Data.Capnp.TraversalLimit
 import Data.Mutable
 
-import Internal.BuildPure (PureBuilder, createPure)
+import Data.Capnp.Basics.Pure ()
+import Internal.BuildPure     (PureBuilder, createPure)
 
 import qualified Codec.Capnp        as Codec
 import qualified Data.Capnp.Basics  as Basics
