@@ -64,3 +64,7 @@ executable low-level-write
 executable low-level-read
   import: addressbook
   main-is: LowLevelRead.hs
+
+executable overloaded-labels-read
+  import: addressbook
+  main-is: OverloadedLabelsRead.hs

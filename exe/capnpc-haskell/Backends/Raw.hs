@@ -65,6 +65,7 @@ fmtModule thisMod@Module{modName=Namespace modNameParts,..} =
     , "{-# LANGUAGE TypeFamilies #-}"
     , "{-# LANGUAGE DeriveGeneric #-}"
     , "{-# LANGUAGE DataKinds #-}"
+    , "{-# LANGUAGE ExplicitForAll #-}"
     , "{- |"
     , "Module: " <> humanMod
     , "Description: Low-level generated module for " <> modFileText
@@ -248,9 +249,8 @@ fmtFieldAccessor thisMod typeName variantName Field{..} = vcat
                 hcat [ getName, " :: U'.ReadCtx m msg => ", getType fieldType ]
             getDef def = hcat [ getName, " (", dataCon, " struct) =", def ]
             fmtIsLabel fieldType =
-                instance_
-                    [ "U'.ReadCtx m msg" ]
-                    (hcat [ "IsLabel ", fromString (show fieldName), " (H'.Get (", getType fieldType, "))" ])
+                instance_ [ ]
+                    (hcat [ "IsLabel ", fromString (show fieldName), " (forall m msg. U'.ReadCtx m msg => H'.Get (", getType fieldType, "))" ])
                     [ hcat [ "fromLabel = H'.Get $ ", getName ] ]
         in case fieldLocType of
             DataField loc ty -> vcat
