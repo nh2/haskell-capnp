@@ -1,4 +1,9 @@
 before_script:
+  # Install capnproto
+  - apt-get update -y
+  - apt-get install -y capnproto=0.6.1-1
+  # Install extra haskell tools:
+  - apt-get install -y stylish-haskell hlint
   # Report the versions of varioius software, to make diagnosing problems
   # easier:
   - ghc --version
@@ -8,17 +13,6 @@ before_script:
   - hlint --version
   # Update the hackage databse:
   - cabal update
-test:alltests:
-  image: zenhack/haskell-capnp-ci
-  script:
-    - cabal new-build
-    - cabal new-test
-      # Linting:
-    - ./scripts/hlint.sh
-      # Run stylish-haskell, and fail if it changes anything:
-    - ./scripts/format.sh
-    - git diff --exit-code
-      # Regenerate the schema, and make sure they're in-sync
-      # with what was committed:
-    - ./scripts/regen.sh
-    - git diff --exit-code
+test:ghc-8.2:
+  image: haskell:8.2.2
+  script: ./ci/run-ci.sh
