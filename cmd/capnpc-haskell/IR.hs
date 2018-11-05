@@ -239,6 +239,7 @@ data StructInfo
 data InterfaceDef = InterfaceDef
     { interfaceId :: !Word64
     , methods     :: [Method]
+    , supers      :: [(Name, InterfaceDef)]
     }
     deriving(Show, Read, Eq)
 

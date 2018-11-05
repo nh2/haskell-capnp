@@ -235,7 +235,7 @@ fmtDataDef thisMod dataName DefEnum{} =
         , hcat [ "decerialize = pure" ]
         ]
     ]
-fmtDataDef thisMod dataName (DefInterface InterfaceDef{interfaceId, methods}) =
+fmtDataDef thisMod dataName (DefInterface InterfaceDef{interfaceId, methods, supers}) =
     let pureName = fmtName Pure thisMod dataName
         rawName  = fmtName Raw  thisMod dataName
         pureValName name = fmtName Pure thisMod (valueName name)
@@ -258,7 +258,10 @@ fmtDataDef thisMod dataName (DefInterface InterfaceDef{interfaceId, methods}) =
     , instance_ [] ("C'.Cerialize s " <> pureName)
         [ hcat [ "cerialize msg (", pureName, " client) = ", rawName, " . Just <$> U'.appendCap msg client" ]
         ]
-    , class_ [] (pureName <> "'server_ cap")
+    , class_
+        (flip map supers $ \(name, _) ->
+            fmtName Pure thisMod name <> "'server_ cap")
+        (pureName <> "'server_ cap")
         [ hcat
             -- We provide default definitions for all methods that just throw
             -- 'unimplemented', so that if a schema adds new methods, the code

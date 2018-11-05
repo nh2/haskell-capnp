@@ -287,14 +287,23 @@ generateDecls thisModule nodeMap meta@NodeMetaData{..} =
                     , ( unionName, bodyUnion )
                     ]
         Node'interface{..} ->
+            let genInterface name id methods superclasses = IR.InterfaceDef
+                    { interfaceId = id
+                    , methods = zipWith
+                        (generateMethod thisModule nodeMap name)
+                        [0..]
+                        (V.toList methods)
+                    , supers = flip map (V.toList superclasses) $ \Superclass{id} ->
+                        case nodeMap M.! id of
+                            meta@NodeMetaData{node=Node{union'=Node'interface{..}}} ->
+                                let name = identifierFromMetaData meta in
+                                (name, genInterface name id methods superclasses)
+                            meta ->
+                                error $ "ERROR: superclasss pointed to non-interface node: " ++ show meta
+                    }
+            in
             ( name
-            , IR.DeclDef $ IR.DefInterface $ IR.InterfaceDef
-                { interfaceId = id
-                , methods = zipWith
-                    (generateMethod thisModule nodeMap name)
-                    [0..]
-                    (V.toList methods)
-                }
+            , IR.DeclDef $ IR.DefInterface $ genInterface name id methods superclasses
             )
             : concatMap (generateMethodStructs thisModule nodeMap) methods
         Node'enum{..} ->
