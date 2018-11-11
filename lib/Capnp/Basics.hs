@@ -36,7 +36,7 @@ import Control.Monad.Catch (MonadThrow(throwM))
 import qualified Data.ByteString as BS
 
 import Capnp.Classes
-    (FromPtr(..), ListElem(..), MutListElem(..), ToPtr(..))
+    (FromPtr(..), IsScoped(..), ListElem(..), MutListElem(..), ToPtr(..))
 import Internal.Gen.Instances ()
 
 import qualified Capnp.Errors  as E
@@ -142,8 +142,11 @@ ptrListIndex i list = do
 
 instance FromPtr msg (Data msg) where
     fromPtr msg ptr = fromPtr msg ptr >>= getData
-instance ToPtr s (Data (M.MutMsg s)) where
+instance ToPtr (Data (M.MutMsg s)) where
     toPtr msg (Data l) = toPtr msg l
+
+instance IsScoped msg => IsScoped (Data msg) where
+    type Scope (Data msg) = Scope msg
 
 instance FromPtr msg (Text msg) where
     fromPtr msg ptr = case ptr of
@@ -155,5 +158,8 @@ instance FromPtr msg (Text msg) where
             -- the empty string, so we bypass it here.
             Data bytes <- fromPtr msg ptr
             pure $ Text bytes
-instance ToPtr s (Text (M.MutMsg s)) where
+instance ToPtr (Text (M.MutMsg s)) where
     toPtr msg (Text l) = toPtr msg l
+
+instance IsScoped msg => IsScoped (Text msg) where
+    type Scope (Text msg) = Scope msg

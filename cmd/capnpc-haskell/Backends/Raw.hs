@@ -144,7 +144,10 @@ fmtNewtypeStruct thisMod name info =
                 , instance_ [] ("C'.FromPtr msg (" <> typeCon <> " msg)")
                     [ hcat [ "fromPtr msg ptr = ", dataCon, " <$> C'.fromPtr msg ptr" ]
                     ]
-                , instance_ [] ("C'.ToPtr s (" <> typeCon <> " (M'.MutMsg s))")
+                , instance_ ["C'.IsScoped msg"] ("C'.IsScoped (" <> typeCon <> " msg)")
+                    [ hcat [ "type Scope (", typeCon, " msg) = C'.Scope msg" ]
+                    ]
+                , instance_ [] ("C'.ToPtr (" <> typeCon <> " (M'.MutMsg s))")
                     [ hcat [ "toPtr msg (", dataCon, " struct) = C'.toPtr msg struct" ]
                     ]
                 , instance_ [] ("B'.MutListElem s (" <> typeCon <> " (M'.MutMsg s))")
@@ -509,7 +512,10 @@ fmtDataDef thisMod dataName (DefInterface _) =
     , instance_ [] ("C'.FromPtr msg (" <> name <> " msg)")
         [ hcat [ "fromPtr msg cap = ", name, " <$> C'.fromPtr msg cap" ]
         ]
-    , instance_ [] ("C'.ToPtr s (" <> name <> " (M'.MutMsg s))")
+    , instance_ ["C'.IsScoped msg"] ("C'.IsScoped (" <> name <> " msg)")
+        [ hcat [ "type Scope (", name, " msg) = C'.Scope msg" ]
+        ]
+    , instance_ [] ("C'.ToPtr (" <> name <> " (M'.MutMsg s))")
         [ hcat [ "toPtr msg (", name , " Nothing) = pure Nothing" ]
         , hcat [ "toPtr msg (", name , " (Just cap)) = pure $ Just $ U'.PtrCap cap" ]
         ]

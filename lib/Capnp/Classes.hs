@@ -20,6 +20,7 @@ function mean.
 -}
 module Capnp.Classes
     ( IsWord(..)
+    , IsScoped(..)
     , ListElem(..)
     , MutListElem(..)
     , FromPtr(..)
@@ -141,10 +142,37 @@ class FromPtr msg a where
     -- | Convert an untyped pointer to an @a@.
     fromPtr :: ReadCtx m msg => msg -> Maybe (Ptr msg) -> m a
 
+-- | Types that are scoped to a mutable context.
+class IsScoped a where
+    -- | @'Scope' a@ is the state token for the monadic context to which @a@
+    -- is bound.
+    type Scope a
+
+instance IsScoped (M.MutMsg s) where
+    type Scope (M.MutMsg s) = s
+
+instance IsScoped a => IsScoped (Ptr a) where
+    type Scope (Ptr a) = Scope a
+
+instance IsScoped a => IsScoped (Cap a) where
+    type Scope (Cap a) = Scope a
+
+instance IsScoped a => IsScoped (Maybe a) where
+    type Scope (Maybe a) = Scope a
+
+instance IsScoped a => IsScoped (Struct a) where
+    type Scope (Struct a) = Scope a
+
+instance IsScoped msg => IsScoped (List msg e) where
+    type Scope (List msg e) = Scope msg
+
+instance IsScoped msg => IsScoped (ListOf msg a) where
+    type Scope (ListOf msg a) = Scope msg
+
 -- | Types that can be converted to an untyped pointer.
-class ToPtr s a where
+class IsScoped a => ToPtr a where
     -- | Convert an @a@ to an untyped pointer.
-    toPtr :: M.WriteCtx m s => M.MutMsg s -> a -> m (Maybe (Ptr (M.MutMsg s)))
+    toPtr :: (M.WriteCtx m s, s ~ Scope a) => M.MutMsg s -> a -> m (Maybe (Ptr (M.MutMsg s)))
 
 -- | Types that can be extracted from a struct.
 class FromStruct msg a where
@@ -209,7 +237,7 @@ instance FromPtr msg (ListOf msg ()) where
     fromPtr msg Nothing                         = pure $ messageDefault msg
     fromPtr msg (Just (PtrList (U.List0 list))) = pure list
     fromPtr _ _ = expected "pointer to list with element size 0"
-instance ToPtr s (ListOf (M.MutMsg s) ()) where
+instance ToPtr (ListOf (M.MutMsg s) ()) where
     toPtr _ = pure . Just . PtrList . U.List0
 
 -- To/FromPtr instances for lists of unsigned integers.
@@ -217,38 +245,38 @@ instance FromPtr msg (ListOf msg Word8) where
     fromPtr msg Nothing                       = pure $ messageDefault msg
     fromPtr msg (Just (PtrList (U.List8 list))) = pure list
     fromPtr _ _ = expected "pointer to list with element size 8"
-instance ToPtr s (ListOf (M.MutMsg s) Word8) where
+instance ToPtr (ListOf (M.MutMsg s) Word8) where
     toPtr _ = pure . Just . PtrList . U.List8
 instance FromPtr msg (ListOf msg Word16) where
     fromPtr msg Nothing                       = pure $ messageDefault msg
     fromPtr msg (Just (PtrList (U.List16 list))) = pure list
     fromPtr _ _ = expected "pointer to list with element size 16"
-instance ToPtr s (ListOf (M.MutMsg s) Word16) where
+instance ToPtr (ListOf (M.MutMsg s) Word16) where
     toPtr _ = pure . Just . PtrList . U.List16
 instance FromPtr msg (ListOf msg Word32) where
     fromPtr msg Nothing                       = pure $ messageDefault msg
     fromPtr msg (Just (PtrList (U.List32 list))) = pure list
     fromPtr _ _ = expected "pointer to list with element size 32"
-instance ToPtr s (ListOf (M.MutMsg s) Word32) where
+instance ToPtr (ListOf (M.MutMsg s) Word32) where
     toPtr _ = pure . Just . PtrList . U.List32
 instance FromPtr msg (ListOf msg Word64) where
     fromPtr msg Nothing                       = pure $ messageDefault msg
     fromPtr msg (Just (PtrList (U.List64 list))) = pure list
     fromPtr _ _ = expected "pointer to list with element size 64"
-instance ToPtr s (ListOf (M.MutMsg s) Word64) where
+instance ToPtr (ListOf (M.MutMsg s) Word64) where
     toPtr _ = pure . Just . PtrList . U.List64
 
 instance FromPtr msg (ListOf msg Bool) where
     fromPtr msg Nothing = pure $ messageDefault msg
     fromPtr msg (Just (PtrList (U.List1 list))) = pure list
     fromPtr _ _ = expected "pointer to list with element size 1."
-instance ToPtr s (ListOf (M.MutMsg s) Bool) where
+instance ToPtr (ListOf (M.MutMsg s) Bool) where
     toPtr _ = pure . Just . PtrList . U.List1
 
 -- To/FromPtr instance for pointers -- this is just the identity.
 instance FromPtr msg (Maybe (Ptr msg)) where
     fromPtr _ = pure
-instance ToPtr s (Maybe (Ptr (M.MutMsg s))) where
+instance ToPtr (Maybe (Ptr (M.MutMsg s))) where
     toPtr _ = pure
 
 -- To/FromPtr instance for composite lists.
@@ -256,7 +284,7 @@ instance FromPtr msg (ListOf msg (Struct msg)) where
     fromPtr msg Nothing                            = pure $ messageDefault msg
     fromPtr msg (Just (PtrList (U.ListStruct list))) = pure list
     fromPtr _ _ = expected "pointer to list of structs"
-instance ToPtr s (ListOf (M.MutMsg s) (Struct (M.MutMsg s))) where
+instance ToPtr (ListOf (M.MutMsg s) (Struct (M.MutMsg s))) where
     toPtr _ = pure . Just . PtrList . U.ListStruct
 
 -- To/FromPtr instance for lists of pointers.
@@ -264,13 +292,13 @@ instance FromPtr msg (ListOf msg (Maybe (Ptr msg))) where
     fromPtr msg Nothing                           = pure $ messageDefault msg
     fromPtr msg (Just (PtrList (U.ListPtr list))) = pure list
     fromPtr _ _ = expected "pointer to list of pointers"
-instance ToPtr s (ListOf (M.MutMsg s) (Maybe (Ptr (M.MutMsg s)))) where
+instance ToPtr (ListOf (M.MutMsg s) (Maybe (Ptr (M.MutMsg s)))) where
     toPtr _ = pure . Just . PtrList . U.ListPtr
 
 -- To/FromPtr instance for *typed* lists.
 instance ListElem msg e => FromPtr msg (List msg e) where
     fromPtr = listFromPtr
-instance ListElem (M.MutMsg s) e => ToPtr s (List (M.MutMsg s) e) where
+instance ListElem (M.MutMsg s) e => ToPtr (List (M.MutMsg s) e) where
     toPtr _ = pure . Just . PtrList . toUntypedList
 
 -- ListElem instance for (typed) nested lists.
@@ -303,12 +331,12 @@ instance FromPtr msg (Struct msg) where
         go = messageDefault
     fromPtr msg (Just (PtrStruct s)) = fromStruct s
     fromPtr _ _                      = expected "pointer to struct"
-instance ToPtr s (Struct (M.MutMsg s)) where
+instance ToPtr (Struct (M.MutMsg s)) where
     toPtr _ = pure . Just . PtrStruct
 
 instance FromPtr msg (Maybe (Cap msg)) where
     fromPtr msg Nothing             = pure Nothing
     fromPtr msg (Just (PtrCap cap)) = pure (Just cap)
     fromPtr _ _                     = expected "pointer to capability"
-instance ToPtr s (Maybe (Cap (M.MutMsg s))) where
+instance ToPtr (Maybe (Cap (M.MutMsg s))) where
     toPtr _ = pure . fmap PtrCap
