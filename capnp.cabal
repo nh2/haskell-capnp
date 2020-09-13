@@ -75,6 +75,9 @@ common shared-opts
   ghc-options:
     -Wall
 
+    -- TODO: when done refactoring, remove this.
+    -Wno-unused-top-binds
+
     -- This warning is triggered by normal use of NamedFieldPuns, so it's a no-go
     -- for us:
     -Wno-name-shadowing
@@ -110,6 +113,7 @@ library
       , Capnp.GenHelpers.Rpc
       , Capnp.IO
       , Capnp.Message
+      , Capnp.Message2
       , Capnp.Pointer
       , Capnp.Untyped
       , Capnp.Untyped.Pure
