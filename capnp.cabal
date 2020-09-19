@@ -117,6 +117,7 @@ library
       , Capnp.Mutability
       , Capnp.Pointer
       , Capnp.Untyped
+      , Capnp.Untyped2
       , Capnp.Untyped.Pure
       , Capnp.TraversalLimit
       , Capnp.Rpc
