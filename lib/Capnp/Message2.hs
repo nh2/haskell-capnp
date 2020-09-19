@@ -65,7 +65,6 @@ module Capnp.Message2 (
 
 
     --
-    , Mutability(..)
     , Msg
     ) where
 
@@ -84,7 +83,6 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer      (execWriterT, tell)
 import Data.Bytes.Get            (getWord32le, runGetS)
 import Data.ByteString.Internal  (ByteString(..))
-import Data.Kind                 (Type)
 import Data.Maybe                (fromJust)
 import Data.Primitive            (MutVar, newMutVar, readMutVar, writeMutVar)
 import Data.Word                 (Word32, Word64)
@@ -101,12 +99,16 @@ import qualified Data.Vector.Storable.Mutable as SMV
 
 import Capnp.Address        (WordAddr(..))
 import Capnp.Bits           (WordCount(..), hi, lo)
+import Capnp.Mutability     (MaybeMutable(..), Mutability(..))
 import Capnp.TraversalLimit (LimitT, MonadLimit(invoice), evalLimitT)
-import Data.Mutable         (Mutable(..))
 import Internal.AppendVec   (AppendVec)
 
 import qualified Capnp.Errors       as E
 import qualified Internal.AppendVec as AppendVec
+
+-- TODO: this module is obsolete (replaced for the most part by Capnp.Mutability),
+-- but we still need to get AppendVec off of it before we can delete it.
+import qualified Data.Mutable as Mutable
 
 -- | The maximum size of a segment supported by this libarary, in words.
 maxSegmentSize :: Int
@@ -119,8 +121,6 @@ maxSegments = 1024
 -- | The maximum number of capabilities allowed in a message by this library.
 maxCaps :: Int
 maxCaps = 512
-
-data Mutability = Mut Type | Const
 
 data Msg :: Mutability -> * where
     MutMsg :: {-# UNPACK #-} !(MutMsg' s) -> Msg ('Mut s)
@@ -515,13 +515,11 @@ newMessage (Just (WordCount sizeHint)) = do
     pure msg
 
 
-instance Thaw (Segment 'Const) where
-    type Mutable s (Segment 'Const) = Segment ('Mut s)
-
-    thaw         = thawSeg   thaw
-    unsafeThaw   = thawSeg   unsafeThaw
-    freeze       = freezeSeg freeze
-    unsafeFreeze = freezeSeg unsafeFreeze
+instance MaybeMutable Segment where
+    thaw         = thawSeg   Mutable.thaw
+    unsafeThaw   = thawSeg   Mutable.unsafeThaw
+    freeze       = freezeSeg Mutable.freeze
+    unsafeFreeze = freezeSeg Mutable.unsafeFreeze
 
 -- Helpers for @Segment ConstMsg@'s Thaw instance.
 thawSeg
@@ -540,9 +538,7 @@ freezeSeg
 freezeSeg freeze (MutSegment mvec) =
     ConstSegment . AppendVec.getFrozenVector <$> freeze mvec
 
-instance Thaw (Msg 'Const) where
-    type Mutable s (Msg 'Const) = Msg ('Mut s)
-
+instance MaybeMutable Msg where
     thaw         = thawMsg   thaw         V.thaw
     unsafeThaw   = thawMsg   unsafeThaw   V.unsafeThaw
     freeze       = freezeMsg freeze       V.freeze

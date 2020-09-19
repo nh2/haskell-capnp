@@ -114,6 +114,7 @@ library
       , Capnp.IO
       , Capnp.Message
       , Capnp.Message2
+      , Capnp.Mutability
       , Capnp.Pointer
       , Capnp.Untyped
       , Capnp.Untyped.Pure
