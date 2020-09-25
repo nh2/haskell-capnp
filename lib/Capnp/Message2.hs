@@ -6,6 +6,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE UndecidableInstances  #-}
 {-|
 Module: Capnp.Message
 Description: Cap'N Proto messages
@@ -66,6 +67,7 @@ module Capnp.Message2 (
 
     --
     , Msg
+    , TraverseMsg(..)
     ) where
 
 -- import {-# SOURCE #-} Capnp.Rpc.Untyped (Client, nullClient)
@@ -125,6 +127,10 @@ maxCaps = 512
 data Msg :: Mutability -> * where
     MutMsg :: {-# UNPACK #-} !(MutMsg' s) -> Msg ('Mut s)
     ConstMsg :: {-# UNPACK #-} !ConstMsg' -> Msg 'Const
+
+instance Eq (Msg mut) where
+    MutMsg m1 == MutMsg m2 = m1 == m2
+    ConstMsg m1 == ConstMsg m2 = m1 == m2
 
 data Segment :: Mutability -> * where
     MutSegment :: AppendVec SMV.MVector s Word64 -> Segment ('Mut s)
@@ -515,7 +521,7 @@ newMessage (Just (WordCount sizeHint)) = do
     pure msg
 
 
-instance MaybeMutable Segment where
+instance {-# OVERLAPS #-} MaybeMutable Segment where
     thaw         = thawSeg   Mutable.thaw
     unsafeThaw   = thawSeg   Mutable.unsafeThaw
     freeze       = freezeSeg Mutable.freeze
@@ -538,11 +544,27 @@ freezeSeg
 freezeSeg freeze (MutSegment mvec) =
     ConstSegment . AppendVec.getFrozenVector <$> freeze mvec
 
-instance MaybeMutable Msg where
+-- | 'TraverseMsg' is similar 'Traversable' from the prelude, but
+-- the intent is that rather than conceptually being a "container",
+-- the instance is a value backed by a message, and the point of the
+-- type class is to be able to apply transformations to the underlying
+-- message.
+class TraverseMsg (f :: Mutability -> *) where
+    tMsg :: Applicative m => (Msg a -> m (Msg b)) -> f a -> m (f b)
+
+instance {-# OVERLAPS #-} MaybeMutable Msg where
     thaw         = thawMsg   thaw         V.thaw
     unsafeThaw   = thawMsg   unsafeThaw   V.unsafeThaw
     freeze       = freezeMsg freeze       V.freeze
     unsafeFreeze = freezeMsg unsafeFreeze V.unsafeFreeze
+
+-- Any instance of TraverseMsg is also MaybeMutable, since we can just thaw/freeze
+-- the underlying message.
+instance TraverseMsg f => MaybeMutable f where
+    thaw         = tMsg thaw
+    freeze       = tMsg freeze
+    unsafeThaw   = tMsg unsafeThaw
+    unsafeFreeze = tMsg unsafeFreeze
 
 -- Helpers for (Msg Const)'s Thaw instance.
 thawMsg :: (PrimMonad m, s ~ PrimState m)

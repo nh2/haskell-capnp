@@ -1,8 +1,10 @@
-{-# LANGUAGE DataKinds    #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TypeFamilies               #-}
 module Capnp.Mutability
     ( Mutability(..)
     , MaybeMutable(..)
+    , Phantom(..)
     ) where
 
 import Control.Monad.Primitive (PrimMonad(PrimState))
@@ -32,3 +34,10 @@ class MaybeMutable (f :: Mutability -> *) where
     -- ensure that the original value is not used after this call.
     unsafeFreeze :: (PrimMonad m, PrimState m ~ s) => f ('Mut s) -> m (f 'Const)
     unsafeFreeze = freeze
+
+newtype Phantom a (mut :: Mutability) = Phantom { unPhantom :: a }
+    deriving(Num)
+
+instance MaybeMutable (Phantom a) where
+    thaw   (Phantom v) = pure (Phantom v)
+    freeze (Phantom v) = pure (Phantom v)
