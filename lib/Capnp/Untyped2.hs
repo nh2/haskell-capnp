@@ -209,7 +209,7 @@ instance TraverseMsg (DataListOf a) where
     tMsg f (DataListOf sz l) = DataListOf sz <$> tMsg f l
 instance TraverseMsg (PtrListOf f) where
     tMsg f (ListOfPtr l)        = ListOfPtr <$> tMsg f l
-    tMsg f (ListOfStruct s len) = (\s' -> ListOfStruct s' len) <$> tMsg f s
+    tMsg f (ListOfStruct s len) = (`ListOfStruct` len) <$> tMsg f s
 instance TraverseMsg NormalList where
     tMsg f NormalList{..} = do
         msg <- f nMsg
