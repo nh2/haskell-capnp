@@ -115,6 +115,7 @@ library
       , Capnp.Message
       , Capnp.Message2
       , Capnp.Mutability
+      , Capnp.Parsable
       , Capnp.Pointer
       , Capnp.Untyped
       , Capnp.Untyped2
