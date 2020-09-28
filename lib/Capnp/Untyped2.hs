@@ -62,6 +62,7 @@ import Control.Monad       (forM_)
 import Control.Monad.Catch (MonadThrow(throwM))
 
 import qualified Data.ByteString as BS
+import qualified Data.Vector     as V
 
 import Capnp.Address        (OffsetError(..), WordAddr(..), pointerFrom)
 import Capnp.Bits
@@ -95,6 +96,22 @@ data Ptr mut
     | PtrList (List mut)
     | PtrStruct (Struct mut)
 
+instance Parsable Ptr where
+    data Parsed Ptr
+        = PPtrCap (Parsed Cap)
+        | PPtrList (Parsed List)
+        | PPtrStruct (Parsed Struct)
+
+    encode msg = \case
+        PPtrCap x -> PtrCap <$> encode msg x
+        PPtrList x -> PtrList <$> encode msg x
+        PPtrStruct x -> PtrStruct <$> encode msg x
+
+    decode = \case
+        PtrCap x -> PPtrCap <$> decode x
+        PtrList x -> PPtrList <$> decode x
+        PtrStruct x -> PPtrStruct <$> decode x
+
 newtype MaybePtr mut = MaybePtr { unwrapPtr :: Maybe (Ptr mut) }
 
 data DataListOf a mut = DataListOf (ListSz a) (NormalList mut)
@@ -120,6 +137,12 @@ data ListOf (f :: Mutability -> *) (mut :: Mutability) where
     ListOf_Data :: DataListOf a mut -> ListOf (Phantom a) mut
     ListOf_Ptr :: PtrListOf f mut -> ListOf f mut
 
+instance Parsable f => Parsable (ListOf f) where
+    newtype Parsed (ListOf f) = List (V.Vector (Parsed f))
+
+    encode = undefined
+    decode l = List <$> V.generateM (length l) (\i -> index i l >>= decode)
+
 -- | A list of values (of arbitrary type) in a message.
 data List mut
     = List0 (ListOf (Phantom ()) mut)
@@ -130,6 +153,37 @@ data List mut
     | List64 (ListOf (Phantom Word64) mut)
     | ListPtr (ListOf MaybePtr mut)
     | ListStruct (ListOf Struct mut)
+
+instance Parsable List where
+    data Parsed List
+        = PList0 (Parsed (ListOf (Phantom ())))
+        | PList1 (Parsed (ListOf (Phantom Bool)))
+        | PList8 (Parsed (ListOf (Phantom Word8)))
+        | PList16 (Parsed (ListOf (Phantom Word16)))
+        | PList32 (Parsed (ListOf (Phantom Word32)))
+        | PList64 (Parsed (ListOf (Phantom Word64)))
+        | PListPtr (Parsed (ListOf MaybePtr))
+        | PListStruct (Parsed (ListOf Struct))
+
+    encode msg = \case
+        PList0 l -> List0 <$> encode msg l
+        PList1 l -> List1 <$> encode msg l
+        PList8 l -> List8 <$> encode msg l
+        PList16 l -> List16 <$> encode msg l
+        PList32 l -> List32 <$> encode msg l
+        PList64 l -> List64 <$> encode msg l
+        PListPtr l -> ListPtr <$> encode msg l
+        PListStruct l -> ListStruct <$> encode msg l
+
+    decode = \case
+        List0 l -> PList0 <$> decode l
+        List1 l -> PList1 <$> decode l
+        List8 l -> PList8 <$> decode l
+        List16 l -> PList16 <$> decode l
+        List32 l -> PList32 <$> decode l
+        List64 l -> PList64 <$> decode l
+        ListPtr l -> PListPtr <$> decode l
+        ListStruct l -> PListStruct <$> decode l
 
 -- | A "normal" (non-composite) list.
 data NormalList mut = NormalList
@@ -151,7 +205,7 @@ data PtrListOf f mut where
 data Cap mut = Cap' (M.Msg mut) !Word32
 
 instance Parsable Cap where
-    data Parsed Cap = Cap M.Client
+    newtype Parsed Cap = Cap M.Client
 
     decode = fmap Cap . getClient
     encode msg (Cap client) = appendCap msg client
@@ -164,13 +218,13 @@ data Struct mut
         !Word16 -- Data section size.
         !Word16 -- Pointer section size.
 
-{-
-instance Parseable Struct where
+instance Parsable Struct where
     data Parsed Struct = Struct
-        { structData :: Parsed (ListOf (Phantom Word64))
-        , structPtrs :: Parsed (ListOf MaybePtr)
+        { structData :: V.Vector Word64
+        , structPtrs :: V.Vector (Maybe (Parsed Ptr))
         }
--}
+    encode = undefined
+    decode = undefined
 
 -- Boilerplate instances:
 instance TraverseMsg MaybePtr where

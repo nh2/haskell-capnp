@@ -20,3 +20,9 @@ class Parsable (f :: Mutability -> *) where
 
     decode :: ReadCtx m mut => f mut -> m (Parsed f)
     encode :: M.WriteCtx m s => M.Msg ('Mut s) -> Parsed f -> m (f ('Mut s))
+
+instance Parsable (Phantom a) where
+    newtype Parsed (Phantom a) = Parsed a
+
+    decode (Phantom x) = pure $ Parsed x
+    encode _ (Parsed x) = pure $ Phantom x
