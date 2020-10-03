@@ -77,16 +77,13 @@ import Capnp.Bits
     )
 import Capnp.Message2       (TraverseMsg(..))
 import Capnp.Mutability     (Mutability(..), Phantom(..))
-import Capnp.Parsable       (Parsable(..), ReadCtx)
+import Capnp.Parsable       (Parsable(..), RWCtx, ReadCtx)
 import Capnp.Pointer        (ElementSize(..))
 import Capnp.TraversalLimit (MonadLimit(invoice))
 
 import qualified Capnp.Errors   as E
 import qualified Capnp.Message2 as M
 import qualified Capnp.Pointer  as P
-
--- | Synonym for ReadCtx + WriteCtx
-type RWCtx m s = (ReadCtx m ('Mut s), M.WriteCtx m s)
 
 -- | A an absolute pointer to a value (of arbitrary type) in a message.
 -- Note that there is no variant for far pointers, which don't make sense
@@ -227,10 +224,24 @@ data Struct mut
 instance Parsable Struct where
     data Parsed Struct = Struct
         { structData :: V.Vector Word64
-        , structPtrs :: V.Vector (Maybe (Parsed Ptr))
+        , structPtrs :: V.Vector (Parsed MaybePtr)
         }
-    encode = undefined
-    decode = undefined
+
+    encode msg Struct{structData, structPtrs} = do
+        dest <- allocStruct msg
+            (fromIntegral $ V.length structData)
+            (fromIntegral $ V.length structPtrs)
+        forM_ [0..V.length structData - 1] $ \i ->
+            setData (structData V.! i) i dest
+        forM_ [0..V.length structPtrs - 1] $ \i -> do
+            ptr <- encode msg (structPtrs V.! i)
+            setPtr ptr i dest
+        pure dest
+
+    decode src = do
+        structData <- V.generateM (structWordCount src) (\i -> getData i src)
+        structPtrs <- V.generateM (structPtrCount src) (\i -> getPtr i src >>= decode)
+        pure Struct{structData, structPtrs}
 
 -- Boilerplate instances:
 instance TraverseMsg MaybePtr where
