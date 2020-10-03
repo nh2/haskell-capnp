@@ -1,3 +1,4 @@
 - ignore: {name: Use list comprehension}
 - ignore: {name: Use <=<}
 - ignore: {name: Use camelCase}
+- ignore: {name: Avoid lambda using `infix`}
