@@ -114,6 +114,12 @@ instance Parsable Ptr where
 
 newtype MaybePtr mut = MaybePtr { unwrapPtr :: Maybe (Ptr mut) }
 
+instance Parsable MaybePtr where
+    data Parsed MaybePtr = PMaybePtr (Maybe (Parsed Ptr))
+
+    encode msg (PMaybePtr mp) = MaybePtr <$> traverse (encode msg) mp
+    decode (MaybePtr mp) = PMaybePtr <$> traverse decode mp
+
 data DataListOf a mut = DataListOf (ListSz a) (NormalList mut)
 
 data ListSz a where
