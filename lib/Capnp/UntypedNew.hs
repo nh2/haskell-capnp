@@ -33,6 +33,13 @@ module Capnp.UntypedNew
     , ReadCtx
     , RWCtx
 
+    , structByteCount
+    , structWordCount
+    , structPtrCount
+    , structListByteCount
+    , structListWordCount
+    , structListPtrCount
+
     , get
     , getClient
     ) where
@@ -45,7 +52,7 @@ import GHC.OverloadedLabels (IsLabel)
 
 import           Capnp.Address
     (OffsetError (..), WordAddr (..), pointerFrom)
-import           Capnp.Bits           (WordCount)
+import           Capnp.Bits           (ByteCount, WordCount, wordsToBytes)
 import qualified Capnp.Errors         as E
 import           Capnp.Message
     (Message, Mutability (..), Segment, WordPtr)
@@ -219,6 +226,30 @@ type family PreferredListRepr (a :: Repr) :: ListRepr  where
 data List a
 
 instance (HasRepr a r, rl ~ PreferredListRepr r)  => HasRepr (List a) ('Ptr ('Just ('List ('Just rl))))
+
+-- | Get the size (in words) of a struct's data section.
+structWordCount :: StructRaw mut -> WordCount
+structWordCount StructRaw{nWords} = fromIntegral nWords
+
+-- | Get the size (in bytes) of a struct's data section.
+structByteCount :: StructRaw mut -> ByteCount
+structByteCount = wordsToBytes . structWordCount
+
+-- | Get the size of a struct's pointer section.
+structPtrCount  :: StructRaw mut -> Word16
+structPtrCount StructRaw{nPtrs} = nPtrs
+
+-- | Get the size (in words) of the data sections in a struct list.
+structListWordCount :: ListRaw mut 'ListComposite -> WordCount
+structListWordCount (ListRaw'Composite _ s) = structWordCount s
+
+-- | Get the size (in words) of the data sections in a struct list.
+structListByteCount :: ListRaw mut 'ListComposite -> ByteCount
+structListByteCount (ListRaw'Composite _ s) = structByteCount s
+
+-- | Get the size of the pointer sections in a struct list.
+structListPtrCount  :: ListRaw mut 'ListComposite -> Word16
+structListPtrCount  (ListRaw'Composite _ s) = structPtrCount s
 
 getClient :: ReadCtx m mut => CapabilityRaw mut -> m M.Client
 getClient CapabilityRaw{message, index} =
