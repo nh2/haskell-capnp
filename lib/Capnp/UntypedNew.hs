@@ -20,20 +20,12 @@ module Capnp.UntypedNew
     , ListRepr(..)
     , DataSz(..)
 
-    , UntypedRaw
-
-    , Untyped
-
     , HasField
     , Field(..)
     , FieldLoc(..)
     , DataFieldLoc(..)
 
     , IsStruct
-    , AnyStruct
-    , AnyPointer
-    , AnyList
-    , Capability
     , ReadCtx
     , RWCtx
 
@@ -54,6 +46,7 @@ import Data.Int
 import Data.Word
 
 import Control.Monad.Catch  (MonadCatch, MonadThrow(throwM))
+import Data.Kind            (Type)
 import GHC.OverloadedLabels (IsLabel)
 
 import           Capnp.Address
@@ -144,8 +137,9 @@ class HasRepr a ('Data sz) => IsData a sz where
 
 ----
 
-data Untyped (r :: Repr)
+-- data Untyped (r :: Repr)
 
+{-
 type Repr'AnyStruct = ('Ptr ('Just 'Struct))
 type Repr'AnyPointer = ('Ptr 'Nothing)
 type Repr'AnyList = ('Ptr ('Just ('List 'Nothing)))
@@ -155,60 +149,88 @@ type AnyStruct = Untyped Repr'AnyStruct
 type AnyPointer = Untyped Repr'AnyPointer
 type AnyList = Untyped Repr'AnyList
 type Capability = Untyped Repr'Capability
+-}
 
 data Raw mut a where
-    Raw :: HasRepr a r => UntypedRaw mut r -> Raw mut a
+    Raw :: HasRepr a r => RawUntyped mut r -> Raw mut a
 
-data UntypedRaw mut r where
-    UntypedRaw'List :: ListRaw mut r -> UntypedRaw mut ('Ptr ('Just ('List ('Just r))))
-    UntypedRaw'Struct :: StructRaw mut -> UntypedRaw mut Repr'AnyStruct
-    UntypedRaw'AnyPointer :: AnyPointerRaw mut -> UntypedRaw mut Repr'AnyPointer
-    UntypedRaw'AnyList :: AnyListRaw mut -> UntypedRaw mut Repr'AnyList
-    UntypedRaw'Capability :: CapabilityRaw mut -> UntypedRaw mut Repr'Capability
-    UntypedRaw'Data :: DataRaw a -> UntypedRaw mut ('Data a)
+type family RawUntyped (mut :: Mutability) (r :: Repr) :: Type where
+    RawUntyped mut ('Data sz) = RawUntypedData sz
+    RawUntyped mut ('Ptr ptr) = RawUntypedMaybePtr mut ptr
 
-data DataRaw a where
-    DR0 :: DataRaw 'Sz0
-    DR1 :: Bool -> DataRaw 'Sz1
-    DR8 :: Word8 -> DataRaw 'Sz8
-    DR16 :: Word16 -> DataRaw 'Sz16
-    DR32 :: Word32 -> DataRaw 'Sz32
-    DR64 :: Word64 -> DataRaw 'Sz64
+type family RawUntypedData (sz :: DataSz) :: Type where
+    RawUntypedData 'Sz0 = ()
+    RawUntypedData 'Sz1 = Bool
+    RawUntypedData 'Sz8 = Word8
+    RawUntypedData 'Sz16 = Word16
+    RawUntypedData 'Sz32 = Word32
+    RawUntypedData 'Sz64 = Word64
 
-data StructRaw mut = StructRaw
+type family RawUntypedMaybePtr (mut :: Mutability) (r :: Maybe PtrRepr) :: Type where
+    RawUntypedMaybePtr mut 'Nothing = RawAnyPointer mut
+    RawUntypedMaybePtr mut ('Just r) = RawUntypedPtr mut r
+
+
+type family RawUntypedPtr (mut :: Mutability) (r :: PtrRepr) :: Type where
+    RawUntypedPtr mut 'Struct = RawStruct mut
+    RawUntypedPtr mut 'Capability = RawCapability mut
+    RawUntypedPtr mut ('List r) = RawUntypedMaybeList mut r
+
+type family RawUntypedMaybeList (mut :: Mutability) (r :: Maybe ListRepr) :: Type where
+    RawUntypedMaybeList mut 'Nothing = RawAnyList mut
+    RawUntypedMaybeList mut ('Just r) = RawUntypedList mut r
+
+type family RawUntypedList (mut :: Mutability) (r :: ListRepr) :: Type where
+    RawUntypedList mut ('ListNormal r) = RawUntypedNormalList mut r
+    RawUntypedList mut 'ListComposite = RawStructList mut
+
+type family RawUntypedNormalList mut (r :: NormalListRepr) where
+    RawUntypedNormalList mut r = RawNormalList mut
+
+data RawStructList mut = RawStructList
+    { len :: Int
+    , tag :: RawStruct mut
+    }
+
+data RawStruct mut = RawStruct
     { location :: WordPtr mut
     , nWords   :: Word16
     , nPtrs    :: Word16
     }
 
-data ListRaw mut (r :: ListRepr) where
-    ListRaw'Composite :: Int -> StructRaw mut -> ListRaw mut 'ListComposite
-    ListRaw'Data :: NormalListRaw mut -> SSz sz -> ListRaw mut ('ListNormal ('ListData sz))
-    ListRaw'Ptr :: NormalListRaw mut -> ListRaw mut ('ListNormal 'ListPtr)
-
-data NormalListRaw mut = NormalListRaw
+data RawNormalList mut = RawNormalList
     { location :: WordPtr mut
     , len      :: Int
     }
 
-data AnyPointerRaw mut
-    = AnyPointerRaw'Struct (StructRaw mut)
-    | AnyPointerRaw'List (AnyListRaw mut)
-    | AnyPointerRaw'Capability (CapabilityRaw mut)
+data RawAnyPointer mut
+    = RawAnyPointer'Struct (RawUntypedPtr mut 'Struct)
+    | RawAnyPointer'Capability (RawUntypedPtr mut 'Capability)
+    | RawAnyPointer'List (RawUntypedPtr mut ('List 'Nothing))
 
-data CapabilityRaw mut = CapabilityRaw
+data RawAnyList mut
+    = RawAnyList'Struct (RawUntypedList mut 'ListComposite)
+    | RawAnyList'Normal (RawAnyNormalList mut)
+
+data RawAnyNormalList mut
+    = RawAnyNormalList'Ptr (RawNormalList mut)
+    | RawAnyNormalList'Data (RawAnyDataList mut)
+
+data RawAnyDataList mut = RawAnyDataList
+    { eltSiz :: DataSz
+    , list   :: RawNormalList mut
+    }
+
+data RawCapability mut = RawCapability
     { index   :: Word32
     , message :: Message mut
     }
-
-data AnyListRaw mut where
-    AnyListRaw :: ListRaw mut a -> AnyListRaw mut
 
 type IsStruct a = HasRepr a ('Ptr ('Just 'Struct))
 
 ---
 
-instance HasRepr (Untyped r) r
+-- instance HasRepr (Untyped r) r
 
 instance HasRepr () ('Data 'Sz0)
 instance HasRepr Bool ('Data 'Sz1)
@@ -234,49 +256,49 @@ data List a
 instance (HasRepr a r, rl ~ PreferredListRepr r)  => HasRepr (List a) ('Ptr ('Just ('List ('Just rl))))
 
 -- | Get the size (in words) of a struct's data section.
-structWordCount :: StructRaw mut -> WordCount
-structWordCount StructRaw{nWords} = fromIntegral nWords
+structWordCount :: RawStruct mut -> WordCount
+structWordCount RawStruct{nWords} = fromIntegral nWords
 
 -- | Get the size (in bytes) of a struct's data section.
-structByteCount :: StructRaw mut -> ByteCount
+structByteCount :: RawStruct mut -> ByteCount
 structByteCount = wordsToBytes . structWordCount
 
 -- | Get the size of a struct's pointer section.
-structPtrCount  :: StructRaw mut -> Word16
-structPtrCount StructRaw{nPtrs} = nPtrs
+structPtrCount  :: RawStruct mut -> Word16
+structPtrCount RawStruct{nPtrs} = nPtrs
 
 -- | Get the size (in words) of the data sections in a struct list.
-structListWordCount :: ListRaw mut 'ListComposite -> WordCount
-structListWordCount (ListRaw'Composite _ s) = structWordCount s
+structListWordCount :: RawStructList mut -> WordCount
+structListWordCount RawStructList{tag} = structWordCount tag
 
 -- | Get the size (in words) of the data sections in a struct list.
-structListByteCount :: ListRaw mut 'ListComposite -> ByteCount
-structListByteCount (ListRaw'Composite _ s) = structByteCount s
+structListByteCount :: RawStructList mut -> ByteCount
+structListByteCount RawStructList{tag} = structByteCount tag
 
 -- | Get the size of the pointer sections in a struct list.
-structListPtrCount  :: ListRaw mut 'ListComposite -> Word16
-structListPtrCount  (ListRaw'Composite _ s) = structPtrCount s
+structListPtrCount :: RawStructList mut -> Word16
+structListPtrCount RawStructList{tag} = structPtrCount tag
 
-getClient :: ReadCtx m mut => CapabilityRaw mut -> m M.Client
-getClient CapabilityRaw{message, index} =
+getClient :: ReadCtx m mut => RawCapability mut -> m M.Client
+getClient RawCapability{message, index} =
     M.getCap message (fromIntegral index)
 
 -- | @get ptr@ returns the pointer stored at @ptr@.
 -- Deducts 1 from the quota for each word read (which may be multiple in the
 -- case of far pointers).
-get :: ReadCtx m mut => M.WordPtr mut -> m (Maybe (AnyPointerRaw mut))
+get :: ReadCtx m mut => M.WordPtr mut -> m (Maybe (RawAnyPointer mut))
 get ptr@M.WordPtr{pMessage, pAddr} = do
     word <- getWord ptr
     case P.parsePtr word of
         Nothing -> return Nothing
         Just p -> case p of
             P.CapPtr cap -> return $ Just $
-                AnyPointerRaw'Capability CapabilityRaw
+                RawAnyPointer'Capability RawCapability
                     { message = pMessage
                     , index = cap
                     }
             P.StructPtr off dataSz ptrSz -> return $ Just $
-                AnyPointerRaw'Struct $ StructRaw
+                RawAnyPointer'Struct $ RawStruct
                     ptr { M.pAddr = resolveOffset pAddr off } dataSz ptrSz
             P.ListPtr off eltSpec -> Just <$>
                 getList ptr { M.pAddr = resolveOffset pAddr off } eltSpec
@@ -314,8 +336,8 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                                 case P.parsePtr tagWord of
                                     Just (P.StructPtr 0 dataSz ptrSz) ->
                                         return $ Just $
-                                            AnyPointerRaw'Struct $
-                                                StructRaw finalPtr dataSz ptrSz
+                                            RawAnyPointer'Struct $
+                                                RawStruct finalPtr dataSz ptrSz
                                     Just (P.ListPtr 0 eltSpec) ->
                                         Just <$> getList finalPtr eltSpec
                                     -- TODO: I'm not sure whether far pointers to caps are
@@ -325,7 +347,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                                     -- that, and submit a patch to the spec.
                                     Just (P.CapPtr cap) ->
                                         return $ Just $
-                                            AnyPointerRaw'Capability $ CapabilityRaw
+                                            RawAnyPointer'Capability $ RawCapability
                                                 { message = pMessage
                                                 , index = cap
                                                 }
@@ -345,37 +367,39 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
         invoice 1 *> M.read pSegment wordIndex
     resolveOffset addr@WordAt{..} off =
         addr { wordIndex = wordIndex + fromIntegral off + 1 }
-    getList ptr@M.WordPtr{pAddr=addr@WordAt{wordIndex}} eltSpec = AnyPointerRaw'List <$>
+    getList ptr@M.WordPtr{pAddr=addr@WordAt{wordIndex}} eltSpec = RawAnyPointer'List <$>
         case eltSpec of
-            P.EltNormal sz len -> pure $ case sz of
-                P.Sz0   -> AnyListRaw $ ListRaw'Data nlist Ssz0
-                P.Sz1   -> AnyListRaw $ ListRaw'Data nlist Ssz1
-                P.Sz8   -> AnyListRaw $ ListRaw'Data nlist Ssz8
-                P.Sz16  -> AnyListRaw $ ListRaw'Data nlist Ssz16
-                P.Sz32  -> AnyListRaw $ ListRaw'Data nlist Ssz32
-                P.Sz64  -> AnyListRaw $ ListRaw'Data nlist Ssz64
-                P.SzPtr -> AnyListRaw $ ListRaw'Ptr nlist
+            P.EltNormal sz len -> pure $ RawAnyList'Normal $ case sz of
+                P.Sz0   -> RawAnyNormalList'Data $ RawAnyDataList Sz0 nlist
+                P.Sz1   -> RawAnyNormalList'Data $ RawAnyDataList Sz1 nlist
+                P.Sz8   -> RawAnyNormalList'Data $ RawAnyDataList Sz8 nlist
+                P.Sz16  -> RawAnyNormalList'Data $ RawAnyDataList Sz16 nlist
+                P.Sz32  -> RawAnyNormalList'Data $ RawAnyDataList Sz32 nlist
+                P.Sz64  -> RawAnyNormalList'Data $ RawAnyDataList Sz64 nlist
+                P.SzPtr -> RawAnyNormalList'Ptr nlist
               where
-                nlist = NormalListRaw ptr (fromIntegral len)
+                nlist = RawNormalList ptr (fromIntegral len)
             P.EltComposite _ -> do
                 tagWord <- getWord ptr
                 case P.parsePtr' tagWord of
                     P.StructPtr numElts dataSz ptrSz ->
-                        pure $ AnyListRaw $ ListRaw'Composite (fromIntegral numElts)
-                            (StructRaw
+                        pure $ RawAnyList'Struct RawStructList
+                            { len = fromIntegral numElts
+                            , tag = RawStruct
                                 ptr { M.pAddr = addr { wordIndex = wordIndex + 1 } }
                                 dataSz
-                                ptrSz)
+                                ptrSz
+                            }
                     tag -> throwM $ E.InvalidDataError $
                         "Composite list tag was not a struct-" ++
                         "formatted word: " ++ show tag
 
 
 -- | Returns the length of a list
-length :: ListRaw mut r -> Int
-length (ListRaw'Composite len _)           = len
-length (ListRaw'Data NormalListRaw{len} _) = len
-length (ListRaw'Ptr NormalListRaw{len})    = len
+length :: RawAnyList mut -> Int
+length (RawAnyList'Struct RawStructList{len})                        = len
+length (RawAnyList'Normal (RawAnyNormalList'Ptr RawNormalList{len})) = len
+length (RawAnyList'Normal (RawAnyNormalList'Data RawAnyDataList{list=RawNormalList{len}})) = len
 
 
 {-
@@ -387,10 +411,10 @@ index i list
   where
     index' :: ReadCtx m mut => ListRaw mut r -> m (UntypedRaw mut r)
     index' (ListRaw'Data _ Ssz0) = UntypedRaw'Data DR0
-    index' (ListRaw'Composite _ (StructRaw ptr@M.WordPtr{pAddr=addr@WordAt{..}} dataSz ptrSz)) = do
+    index' (ListRaw'Composite _ (RawStruct ptr@M.WordPtr{pAddr=addr@WordAt{..}} dataSz ptrSz)) = do
         let offset = WordCount $ i * (fromIntegral dataSz + fromIntegral ptrSz)
         let addr' = addr { wordIndex = wordIndex + offset }
-        return $ StructRaw ptr { M.pAddr = addr' } dataSz ptrSz
+        return $ RawStruct ptr { M.pAddr = addr' } dataSz ptrSz
 
     index' (ListOfBool   nlist) = do
         Word1 val <- indexNList nlist 64
@@ -407,7 +431,7 @@ index i list
     indexData nlist sz = case sz of
         Ssz0 -> UntypedRaw'Data DR0
     indexNList :: (ReadCtx m mut, Integral a) => NormalList mut -> Int -> m a
-    indexNList (NormalListRaw M.WordPtr{pSegment, pAddr=WordAt{..}} len) sz = do
+    indexNList (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..}} len) sz = do
         let eltsPerWord =
             let wordIndex' = wordIndex + WordCount (i `div` eltsPerWord)
             word <- M.read pSegment wordIndex'
