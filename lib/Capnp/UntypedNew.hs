@@ -14,18 +14,22 @@
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 {-# OPTIONS_GHC -Wno-unused-imports #-}
 module Capnp.UntypedNew
-    ( DataSz(..)
+    ( HasRepr
     , Repr(..)
-    , ListRepr(..)
     , PtrRepr(..)
+    , ListRepr(..)
+    , DataSz(..)
+
     , UntypedRaw
-    , HasRepr
+
+    , Untyped
+
     , HasField
+    , Field(..)
     , FieldLoc(..)
     , DataFieldLoc(..)
-    , Field(..)
+
     , IsStruct
-    , Untyped
     , AnyStruct
     , AnyPointer
     , AnyList
@@ -39,10 +43,12 @@ module Capnp.UntypedNew
     , structListByteCount
     , structListWordCount
     , structListPtrCount
-
-    , get
+    , length
     , getClient
+    , get
     ) where
+
+import Prelude hiding (length)
 
 import Data.Int
 import Data.Word
@@ -363,3 +369,48 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                     tag -> throwM $ E.InvalidDataError $
                         "Composite list tag was not a struct-" ++
                         "formatted word: " ++ show tag
+
+
+-- | Returns the length of a list
+length :: ListRaw mut r -> Int
+length (ListRaw'Composite len _)           = len
+length (ListRaw'Data NormalListRaw{len} _) = len
+length (ListRaw'Ptr NormalListRaw{len})    = len
+
+
+{-
+-- | @index i list@ returns the ith element in @list@. Deducts 1 from the quota
+index :: ReadCtx m mut => Int -> ListRaw mut r -> m (UntypedRaw mut r)
+index i list
+    | i < 0 || i >= length list = throwM E.BoundsError { E.index = i, E.maxIndex = nLen nlist - 1 }
+    | otherwise = invoice 1 >> index' list
+  where
+    index' :: ReadCtx m mut => ListRaw mut r -> m (UntypedRaw mut r)
+    index' (ListRaw'Data _ Ssz0) = UntypedRaw'Data DR0
+    index' (ListRaw'Composite _ (StructRaw ptr@M.WordPtr{pAddr=addr@WordAt{..}} dataSz ptrSz)) = do
+        let offset = WordCount $ i * (fromIntegral dataSz + fromIntegral ptrSz)
+        let addr' = addr { wordIndex = wordIndex + offset }
+        return $ StructRaw ptr { M.pAddr = addr' } dataSz ptrSz
+
+    index' (ListOfBool   nlist) = do
+        Word1 val <- indexNList nlist 64
+        pure val
+    index' (ListOfWord8  nlist) = indexNList nlist 8
+    index' (ListOfWord16 nlist) = indexNList nlist 4
+    index' (ListOfWord32 nlist) = indexNList nlist 2
+    index' (ListOfWord64 (NormalList M.WordPtr{pSegment, pAddr=WordAt{wordIndex}} len))
+        | i < len = M.read pSegment $ wordIndex + WordCount i
+        | otherwise = throwM E.BoundsError { E.index = i, E.maxIndex = len - 1}
+    index' (ListOfPtr (NormalList ptr@M.WordPtr{pAddr=addr@WordAt{..}} len))
+        | i < len = get ptr { M.pAddr = addr { wordIndex = wordIndex + WordCount i } }
+        | otherwise = throwM E.BoundsError { E.index = i, E.maxIndex = len - 1}
+    indexData nlist sz = case sz of
+        Ssz0 -> UntypedRaw'Data DR0
+    indexNList :: (ReadCtx m mut, Integral a) => NormalList mut -> Int -> m a
+    indexNList (NormalListRaw M.WordPtr{pSegment, pAddr=WordAt{..}} len) sz = do
+        let eltsPerWord =
+            let wordIndex' = wordIndex + WordCount (i `div` eltsPerWord)
+            word <- M.read pSegment wordIndex'
+            let shift = (i `mod` eltsPerWord) * (64 `div` eltsPerWord)
+            pure $ fromIntegral $ word `shiftR` shift
+-}
