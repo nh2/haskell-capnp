@@ -29,7 +29,6 @@ module Capnp.UntypedNew
     , FieldLoc(..)
     , DataFieldLoc(..)
 
-    , IsStruct
     , ReadCtx
     , RWCtx
 
@@ -46,16 +45,20 @@ module Capnp.UntypedNew
 
 import Prelude hiding (length)
 
+import Data.Bits
 import Data.Int
 import Data.Word
 
+import Control.Monad        (when)
 import Control.Monad.Catch  (MonadCatch, MonadThrow(throwM))
 import Data.Kind            (Type)
+import Data.Proxy           (Proxy)
 import GHC.OverloadedLabels (IsLabel)
 
 import           Capnp.Address
     (OffsetError (..), WordAddr (..), pointerFrom)
-import           Capnp.Bits           (ByteCount, WordCount, wordsToBytes)
+import           Capnp.Bits
+    (BitCount, ByteCount, Word1 (..), WordCount (..), wordsToBytes)
 import qualified Capnp.Errors         as E
 import           Capnp.Message
     (Message, Mutability (..), Segment, WordPtr)
@@ -70,23 +73,17 @@ type ReadCtx m mut = (M.MonadReadMessage mut m, MonadThrow m, MonadLimit m)
 -- | Synonym for ReadCtx + WriteCtx
 type RWCtx m s = (ReadCtx m ('Mut s), M.WriteCtx m s)
 
-data DataSz = Sz0  | Sz1 | Sz8 | Sz16 | Sz32 | Sz64
+data DataSz = Sz0 | Sz1 | Sz8 | Sz16 | Sz32 | Sz64
 
-data SSz (a :: DataSz) where
-    Ssz0 :: SSz 'Sz0
-    Ssz1 :: SSz 'Sz1
-    Ssz8 :: SSz 'Sz8
-    Ssz16 :: SSz 'Sz16
-    Ssz32 :: SSz 'Sz32
-    Ssz64 :: SSz 'Sz64
+class DataSizeBits (sz :: DataSz) where
+    szBits :: BitCount
 
-szBits :: SSz a -> Int
-szBits Ssz0  = 0
-szBits Ssz1  = 1
-szBits Ssz8  = 8
-szBits Ssz16 = 16
-szBits Ssz32 = 32
-szBits Ssz64 = 64
+instance DataSizeBits 'Sz0 where szBits = 0
+instance DataSizeBits 'Sz1 where szBits = 1
+instance DataSizeBits 'Sz8 where szBits = 8
+instance DataSizeBits 'Sz16 where szBits = 16
+instance DataSizeBits 'Sz32 where szBits = 32
+instance DataSizeBits 'Sz64 where szBits = 64
 
 data ListRepr where
     ListNormal :: NormalListRepr -> ListRepr
@@ -111,9 +108,9 @@ data FieldLoc (r :: Repr) where
     PtrField :: Word16 -> FieldLoc ('Ptr a)
     DataField :: DataFieldLoc a -> FieldLoc ('Data a)
 
-data DataFieldLoc sz = DataFieldLoc
+data DataFieldLoc (sz :: DataSz) = DataFieldLoc
     { offset       :: Int
-    , size         :: SSz sz
+    , size         :: Proxy sz
     , defaultValue :: Word64
     }
 
@@ -141,9 +138,13 @@ class HasRepr a ('Data sz) => IsData a sz where
 
 ----
 
-type family Raw (mut :: Mutability) (r :: Repr) :: Type where
-    Raw mut ('Data sz) = RawData sz
-    Raw mut ('Ptr ptr) = RawPtr mut ptr
+type family Raw (mut :: Mutability) (r :: Maybe Repr) :: Type where
+    Raw mut ('Just r) = RawSome mut r
+    Raw mut 'Nothing = RawAny mut
+
+type family RawSome (mut :: Mutability) (r :: Repr) :: Type where
+    RawSome mut ('Data sz) = RawData sz
+    RawSome mut ('Ptr ptr) = RawPtr mut ptr
 
 type family RawData (sz :: DataSz) :: Type where
     RawData 'Sz0 = ()
@@ -154,7 +155,7 @@ type family RawData (sz :: DataSz) :: Type where
     RawData 'Sz64 = Word64
 
 type family RawPtr (mut :: Mutability) (r :: Maybe PtrRepr) :: Type where
-    RawPtr mut 'Nothing = RawAnyPointer mut
+    RawPtr mut 'Nothing = Maybe (RawAnyPointer mut)
     RawPtr mut ('Just r) = RawSomePtr mut r
 
 
@@ -187,6 +188,18 @@ data RawNormalList mut = RawNormalList
     , len      :: Int
     }
 
+data RawAny mut
+    = RawAnyPointer (RawAnyPointer mut)
+    | RawAnyData RawAnyData
+
+data RawAnyData
+    = RawAnyData0 (RawData 'Sz0)
+    | RawAnyData1 (RawData 'Sz1)
+    | RawAnyData8 (RawData 'Sz8)
+    | RawAnyData16 (RawData 'Sz16)
+    | RawAnyData32 (RawData 'Sz32)
+    | RawAnyData64 (RawData 'Sz64)
+
 data RawAnyPointer mut
     = RawAnyPointer'Struct (RawSomePtr mut 'Struct)
     | RawAnyPointer'Capability (RawSomePtr mut 'Capability)
@@ -201,16 +214,14 @@ data RawAnyNormalList mut
     | RawAnyNormalList'Data (RawAnyDataList mut)
 
 data RawAnyDataList mut = RawAnyDataList
-    { eltSiz :: DataSz
-    , list   :: RawNormalList mut
+    { eltSize :: DataSz
+    , list    :: RawNormalList mut
     }
 
 data RawCapability mut = RawCapability
-    { index   :: Word32
-    , message :: Message mut
+    { capIndex :: Word32
+    , message  :: Message mut
     }
-
-type IsStruct a = HasRepr a ('Ptr ('Just 'Struct))
 
 ---
 
@@ -230,10 +241,16 @@ instance HasRepr Float ('Data 'Sz32)
 instance HasRepr Double ('Data 'Sz64)
 
 
-type family PreferredListRepr (a :: Repr) :: ListRepr  where
-    PreferredListRepr ('Data sz) = 'ListNormal ('ListData sz)
-    PreferredListRepr ('Ptr ('Just 'Struct)) = 'ListComposite
-    PreferredListRepr ('Ptr a) = 'ListNormal 'ListPtr
+type family ElemRepr (rl :: Maybe ListRepr) :: Maybe Repr where
+    ElemRepr ('Just 'ListComposite) = 'Just ('Ptr ('Just 'Struct))
+    ElemRepr ('Just ('ListNormal 'ListPtr)) = 'Just ('Ptr 'Nothing)
+    ElemRepr ('Just ('ListNormal ('ListData sz))) = 'Just ('Data sz)
+    ElemRepr 'Nothing = 'Nothing
+
+type family ListReprFor (e :: Repr) :: ListRepr where
+    ListReprFor ('Data sz) = 'ListNormal ('ListData sz)
+    ListReprFor ('Ptr ('Just 'Struct)) = 'ListComposite
+    ListReprFor ('Ptr a) = 'ListNormal 'ListPtr
 
 -- | Get the size (in words) of a struct's data section.
 structWordCount :: RawStruct mut -> WordCount
@@ -260,8 +277,8 @@ structListPtrCount :: RawStructList mut -> Word16
 structListPtrCount RawStructList{tag} = structPtrCount tag
 
 getClient :: ReadCtx m mut => RawCapability mut -> m M.Client
-getClient RawCapability{message, index} =
-    M.getCap message (fromIntegral index)
+getClient RawCapability{message, capIndex} =
+    M.getCap message (fromIntegral capIndex)
 
 -- | @get ptr@ returns the pointer stored at @ptr@.
 -- Deducts 1 from the quota for each word read (which may be multiple in the
@@ -275,7 +292,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
             P.CapPtr cap -> return $ Just $
                 RawAnyPointer'Capability RawCapability
                     { message = pMessage
-                    , index = cap
+                    , capIndex = cap
                     }
             P.StructPtr off dataSz ptrSz -> return $ Just $
                 RawAnyPointer'Struct $ RawStruct
@@ -329,7 +346,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                                         return $ Just $
                                             RawAnyPointer'Capability $ RawCapability
                                                 { message = pMessage
-                                                , index = cap
+                                                , capIndex = cap
                                                 }
                                     ptr -> throwM $ E.InvalidDataError $
                                         "The tag word of a far pointer's " ++
@@ -375,13 +392,59 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                         "formatted word: " ++ show tag
 
 class List (r :: Maybe ListRepr) where
+    -- | Returns the length of a list
     length :: RawList mut r -> Int
+
+    -- | Index into a list, without checking bounds or traversal
+    -- limits. Call 'index' instead of calling this directly.
+    basicIndex
+        :: forall mut m. (ReadCtx m mut)
+        => Int -> RawList mut r -> m (Raw mut (ElemRepr r))
+
+-- | @index i list@ returns the ith element in @list@. Deducts 1 from the quota
+index
+    :: forall r mut m. (ReadCtx m mut, List r)
+    => Int -> RawList mut r -> m (Raw mut (ElemRepr r))
+index i list = do
+    invoice 1
+    let len = length @r @mut list
+    when (i < 0 || i >= len) $
+        throwM E.BoundsError { E.index = i, E.maxIndex = len - 1}
+    basicIndex @r @mut i list
 
 instance List ('Just 'ListComposite) where
     length RawStructList{len} = len
+    basicIndex i RawStructList{tag = RawStruct ptr@M.WordPtr{pAddr=addr@WordAt{..}} dataSz ptrSz} = do
+        let offset = WordCount $ i * (fromIntegral dataSz + fromIntegral ptrSz)
+        let addr' = addr { wordIndex = wordIndex + offset }
+        return $ RawStruct ptr { M.pAddr = addr' } dataSz ptrSz
 
-instance List ('Just ('ListNormal r)) where
+instance List ('Just ('ListNormal 'ListPtr)) where
     length RawNormalList{len} = len
+    basicIndex i (RawNormalList ptr@M.WordPtr{pAddr=addr@WordAt{..}} _) =
+        get ptr { M.pAddr = addr { wordIndex = wordIndex + WordCount i } }
+
+basicIndexNList :: (ReadCtx m mut, Integral a) => BitCount -> Int -> RawNormalList mut -> m a
+basicIndexNList nbits i (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..}} _) = do
+    let eltsPerWord = 64 `div` fromIntegral nbits
+    let wordIndex' = wordIndex + WordCount (i `div` eltsPerWord)
+    word <- M.read pSegment wordIndex'
+    let shift = fromIntegral (i `mod` eltsPerWord) * nbits
+    pure $ fromIntegral $ word `shiftR` fromIntegral shift
+
+instance List ('Just ('ListNormal ('ListData 'Sz0))) where
+    length RawNormalList{len} = len
+    basicIndex _ _ = pure ()
+
+instance List ('Just ('ListNormal ('ListData 'Sz1))) where
+    length RawNormalList{len} = len
+    basicIndex i list = do
+        Word1 val <- basicIndexNList 64 i list
+        pure val
+
+instance (DataSizeBits sz, Integral (RawData sz)) => List ('Just ('ListNormal ('ListData sz))) where
+    length RawNormalList{len} = len
+    basicIndex = basicIndexNList (szBits @sz)
 
 instance List 'Nothing where
     length (RawAnyList'Struct (l :: RawStructList mut)) =
@@ -393,24 +456,27 @@ instance List 'Nothing where
         in
         -- The type checker insists we give it *some* type for the first parameter,
         -- but any normal list type will do, since the instances for length
-        -- are all the same one -- so this is fine even if the list was actually
+        -- are all the same -- so this is fine even if the list was actually
         -- a data list.
         length @('Just ('ListNormal 'ListPtr)) @mut list
 
+    basicIndex i (RawAnyList'Struct (l :: RawStructList mut)) =
+        RawAnyPointer . RawAnyPointer'Struct <$> basicIndex @('Just 'ListComposite) @mut i l
+    basicIndex _ _ = undefined
+{-
+    basicIndex i (RawAnyList'Normal (RawAnyList'Ptr list)) =
+        RawAnyPointer . RawAnyPointer'
+-}
+
 {-
 -- | @index i list@ returns the ith element in @list@. Deducts 1 from the quota
-index :: ReadCtx m mut => Int -> ListRaw mut r -> m (UntypedRaw mut r)
-index i list
-    | i < 0 || i >= length list = throwM E.BoundsError { E.index = i, E.maxIndex = nLen nlist - 1 }
-    | otherwise = invoice 1 >> index' list
+index :: ReadCtx m mut => Int -> ListOf mut a -> m a
+index i list = invoice 1 >> index' list
   where
-    index' :: ReadCtx m mut => ListRaw mut r -> m (UntypedRaw mut r)
-    index' (ListRaw'Data _ Ssz0) = UntypedRaw'Data DR0
-    index' (ListRaw'Composite _ (RawStruct ptr@M.WordPtr{pAddr=addr@WordAt{..}} dataSz ptrSz)) = do
-        let offset = WordCount $ i * (fromIntegral dataSz + fromIntegral ptrSz)
-        let addr' = addr { wordIndex = wordIndex + offset }
-        return $ RawStruct ptr { M.pAddr = addr' } dataSz ptrSz
-
+    index' :: ReadCtx m mut => ListOf mut a -> m a
+    index' (ListOfVoid nlist)
+        | i < nLen nlist = pure ()
+        | otherwise = throwM E.BoundsError { E.index = i, E.maxIndex = nLen nlist - 1 }
     index' (ListOfBool   nlist) = do
         Word1 val <- indexNList nlist 64
         pure val
@@ -420,16 +486,13 @@ index i list
     index' (ListOfWord64 (NormalList M.WordPtr{pSegment, pAddr=WordAt{wordIndex}} len))
         | i < len = M.read pSegment $ wordIndex + WordCount i
         | otherwise = throwM E.BoundsError { E.index = i, E.maxIndex = len - 1}
-    index' (ListOfPtr (NormalList ptr@M.WordPtr{pAddr=addr@WordAt{..}} len))
-        | i < len = get ptr { M.pAddr = addr { wordIndex = wordIndex + WordCount i } }
-        | otherwise = throwM E.BoundsError { E.index = i, E.maxIndex = len - 1}
-    indexData nlist sz = case sz of
-        Ssz0 -> UntypedRaw'Data DR0
     indexNList :: (ReadCtx m mut, Integral a) => NormalList mut -> Int -> m a
-    indexNList (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..}} len) sz = do
-        let eltsPerWord =
+    indexNList (NormalList M.WordPtr{pSegment, pAddr=WordAt{..}} len) eltsPerWord
+        | i < len = do
             let wordIndex' = wordIndex + WordCount (i `div` eltsPerWord)
             word <- M.read pSegment wordIndex'
             let shift = (i `mod` eltsPerWord) * (64 `div` eltsPerWord)
             pure $ fromIntegral $ word `shiftR` shift
+        | otherwise = throwM E.BoundsError { E.index = i, E.maxIndex = len - 1 }
+
 -}
