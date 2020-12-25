@@ -141,38 +141,35 @@ class HasRepr a ('Data sz) => IsData a sz where
 
 ----
 
-type family RawUntyped (mut :: Mutability) (r :: Repr) :: Type where
-    RawUntyped mut ('Data sz) = RawUntypedData sz
-    RawUntyped mut ('Ptr ptr) = RawUntypedMaybePtr mut ptr
+type family Raw (mut :: Mutability) (r :: Repr) :: Type where
+    Raw mut ('Data sz) = RawData sz
+    Raw mut ('Ptr ptr) = RawPtr mut ptr
 
-type family RawUntypedData (sz :: DataSz) :: Type where
-    RawUntypedData 'Sz0 = ()
-    RawUntypedData 'Sz1 = Bool
-    RawUntypedData 'Sz8 = Word8
-    RawUntypedData 'Sz16 = Word16
-    RawUntypedData 'Sz32 = Word32
-    RawUntypedData 'Sz64 = Word64
+type family RawData (sz :: DataSz) :: Type where
+    RawData 'Sz0 = ()
+    RawData 'Sz1 = Bool
+    RawData 'Sz8 = Word8
+    RawData 'Sz16 = Word16
+    RawData 'Sz32 = Word32
+    RawData 'Sz64 = Word64
 
-type family RawUntypedMaybePtr (mut :: Mutability) (r :: Maybe PtrRepr) :: Type where
-    RawUntypedMaybePtr mut 'Nothing = RawAnyPointer mut
-    RawUntypedMaybePtr mut ('Just r) = RawUntypedPtr mut r
+type family RawPtr (mut :: Mutability) (r :: Maybe PtrRepr) :: Type where
+    RawPtr mut 'Nothing = RawAnyPointer mut
+    RawPtr mut ('Just r) = RawSomePtr mut r
 
 
-type family RawUntypedPtr (mut :: Mutability) (r :: PtrRepr) :: Type where
-    RawUntypedPtr mut 'Struct = RawStruct mut
-    RawUntypedPtr mut 'Capability = RawCapability mut
-    RawUntypedPtr mut ('List r) = RawUntypedMaybeList mut r
+type family RawSomePtr (mut :: Mutability) (r :: PtrRepr) :: Type where
+    RawSomePtr mut 'Struct = RawStruct mut
+    RawSomePtr mut 'Capability = RawCapability mut
+    RawSomePtr mut ('List r) = RawList mut r
 
-type family RawUntypedMaybeList (mut :: Mutability) (r :: Maybe ListRepr) :: Type where
-    RawUntypedMaybeList mut 'Nothing = RawAnyList mut
-    RawUntypedMaybeList mut ('Just r) = RawUntypedList mut r
+type family RawList (mut :: Mutability) (r :: Maybe ListRepr) :: Type where
+    RawList mut 'Nothing = RawAnyList mut
+    RawList mut ('Just r) = RawSomeList mut r
 
-type family RawUntypedList (mut :: Mutability) (r :: ListRepr) :: Type where
-    RawUntypedList mut ('ListNormal r) = RawUntypedNormalList mut r
-    RawUntypedList mut 'ListComposite = RawStructList mut
-
-type family RawUntypedNormalList mut (r :: NormalListRepr) where
-    RawUntypedNormalList mut r = RawNormalList mut
+type family RawSomeList (mut :: Mutability) (r :: ListRepr) :: Type where
+    RawSomeList mut ('ListNormal r) = RawNormalList mut
+    RawSomeList mut 'ListComposite = RawStructList mut
 
 data RawStructList mut = RawStructList
     { len :: Int
@@ -191,12 +188,12 @@ data RawNormalList mut = RawNormalList
     }
 
 data RawAnyPointer mut
-    = RawAnyPointer'Struct (RawUntypedPtr mut 'Struct)
-    | RawAnyPointer'Capability (RawUntypedPtr mut 'Capability)
-    | RawAnyPointer'List (RawUntypedPtr mut ('List 'Nothing))
+    = RawAnyPointer'Struct (RawSomePtr mut 'Struct)
+    | RawAnyPointer'Capability (RawSomePtr mut 'Capability)
+    | RawAnyPointer'List (RawSomePtr mut ('List 'Nothing))
 
 data RawAnyList mut
-    = RawAnyList'Struct (RawUntypedList mut 'ListComposite)
+    = RawAnyList'Struct (RawSomeList mut 'ListComposite)
     | RawAnyList'Normal (RawAnyNormalList mut)
 
 data RawAnyNormalList mut
@@ -378,7 +375,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                         "formatted word: " ++ show tag
 
 class List (r :: Maybe ListRepr) where
-    length :: forall mut. RawUntyped mut ('Ptr ('Just ('List r))) -> Int
+    length :: RawList mut r -> Int
 
 instance List ('Just 'ListComposite) where
     length RawStructList{len} = len
