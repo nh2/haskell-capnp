@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes    #-}
 {-# LANGUAGE ConstraintKinds        #-}
 {-# LANGUAGE DataKinds              #-}
 {-# LANGUAGE DuplicateRecordFields  #-}
@@ -6,8 +7,11 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE NamedFieldPuns         #-}
+{-# LANGUAGE RankNTypes             #-}
 {-# LANGUAGE RecordWildCards        #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE StrictData             #-}
+{-# LANGUAGE TypeApplications       #-}
 {-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE UndecidableInstances   #-}
 -- Temporary, while stuff settles:
@@ -137,23 +141,6 @@ class HasRepr a ('Data sz) => IsData a sz where
 
 ----
 
--- data Untyped (r :: Repr)
-
-{-
-type Repr'AnyStruct = ('Ptr ('Just 'Struct))
-type Repr'AnyPointer = ('Ptr 'Nothing)
-type Repr'AnyList = ('Ptr ('Just ('List 'Nothing)))
-type Repr'Capability = ('Ptr ('Just 'Capability))
-
-type AnyStruct = Untyped Repr'AnyStruct
-type AnyPointer = Untyped Repr'AnyPointer
-type AnyList = Untyped Repr'AnyList
-type Capability = Untyped Repr'Capability
--}
-
-data Raw mut a where
-    Raw :: HasRepr a r => RawUntyped mut r -> Raw mut a
-
 type family RawUntyped (mut :: Mutability) (r :: Repr) :: Type where
     RawUntyped mut ('Data sz) = RawUntypedData sz
     RawUntyped mut ('Ptr ptr) = RawUntypedMaybePtr mut ptr
@@ -250,10 +237,6 @@ type family PreferredListRepr (a :: Repr) :: ListRepr  where
     PreferredListRepr ('Data sz) = 'ListNormal ('ListData sz)
     PreferredListRepr ('Ptr ('Just 'Struct)) = 'ListComposite
     PreferredListRepr ('Ptr a) = 'ListNormal 'ListPtr
-
-data List a
-
-instance (HasRepr a r, rl ~ PreferredListRepr r)  => HasRepr (List a) ('Ptr ('Just ('List ('Just rl))))
 
 -- | Get the size (in words) of a struct's data section.
 structWordCount :: RawStruct mut -> WordCount
@@ -394,13 +377,28 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                         "Composite list tag was not a struct-" ++
                         "formatted word: " ++ show tag
 
+class List (r :: Maybe ListRepr) where
+    length :: forall mut. RawUntyped mut ('Ptr ('Just ('List r))) -> Int
 
--- | Returns the length of a list
-length :: RawAnyList mut -> Int
-length (RawAnyList'Struct RawStructList{len})                        = len
-length (RawAnyList'Normal (RawAnyNormalList'Ptr RawNormalList{len})) = len
-length (RawAnyList'Normal (RawAnyNormalList'Data RawAnyDataList{list=RawNormalList{len}})) = len
+instance List ('Just 'ListComposite) where
+    length RawStructList{len} = len
 
+instance List ('Just ('ListNormal r)) where
+    length RawNormalList{len} = len
+
+instance List 'Nothing where
+    length (RawAnyList'Struct (l :: RawStructList mut)) =
+        length @('Just 'ListComposite) @mut l
+    length (RawAnyList'Normal (l :: RawAnyNormalList mut)) =
+        let list = case l of
+                RawAnyNormalList'Ptr l'                    -> l'
+                RawAnyNormalList'Data RawAnyDataList{list} -> list
+        in
+        -- The type checker insists we give it *some* type for the first parameter,
+        -- but any normal list type will do, since the instances for length
+        -- are all the same one -- so this is fine even if the list was actually
+        -- a data list.
+        length @('Just ('ListNormal 'ListPtr)) @mut list
 
 {-
 -- | @index i list@ returns the ith element in @list@. Deducts 1 from the quota
