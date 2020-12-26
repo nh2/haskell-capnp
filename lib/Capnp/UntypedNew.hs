@@ -189,7 +189,7 @@ data RawNormalList mut = RawNormalList
     }
 
 data RawAny mut
-    = RawAnyPointer (RawAnyPointer mut)
+    = RawAnyPointer (Maybe (RawAnyPointer mut))
     | RawAnyData RawAnyData
 
 data RawAnyData
@@ -461,12 +461,13 @@ instance List 'Nothing where
         length @('Just ('ListNormal 'ListPtr)) @mut list
 
     basicIndex i (RawAnyList'Struct (l :: RawStructList mut)) =
-        RawAnyPointer . RawAnyPointer'Struct <$> basicIndex @('Just 'ListComposite) @mut i l
-    basicIndex _ _ = undefined
-{-
-    basicIndex i (RawAnyList'Normal (RawAnyList'Ptr list)) =
-        RawAnyPointer . RawAnyPointer'
--}
+        RawAnyPointer . Just . RawAnyPointer'Struct <$>
+            basicIndex @('Just 'ListComposite) @mut i l
+    basicIndex i (RawAnyList'Normal (l :: RawAnyNormalList mut)) =
+        case l of
+            RawAnyNormalList'Ptr l' ->
+                RawAnyPointer <$> basicIndex @('Just ('ListNormal 'ListPtr)) i l'
+            RawAnyNormalList'Data _ -> undefined
 
 {-
 -- | @index i list@ returns the ith element in @list@. Deducts 1 from the quota
