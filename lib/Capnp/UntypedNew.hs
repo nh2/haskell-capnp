@@ -53,7 +53,7 @@ module Capnp.UntypedNew
     , allocList32
     , allocList64
     , allocListPtr
-    -- , appendCap
+    , appendCap
 
     -- , TraverseMsg(..)
     ) where
@@ -680,6 +680,12 @@ allocNormalList bitsPerElt msg len = do
         totalWords = bytesToWordsCeil $ bitsToBytesCeil totalBits
     ptr <- M.alloc msg totalWords
     pure RawNormalList { location = ptr, len }
+
+
+appendCap :: M.WriteCtx m s => M.Message ('Mut s) -> M.Client -> m (RawCapability ('Mut s))
+appendCap msg client = do
+    i <- M.appendCap msg client
+    pure RawCapability { message = msg, capIndex = fromIntegral i }
 
 {-
 -- | Returns the root pointer of a message.
