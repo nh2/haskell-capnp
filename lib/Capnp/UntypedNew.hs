@@ -41,7 +41,7 @@ module Capnp.UntypedNew
     , take
     -- , rootPtr
     -- , setRoot
-    -- , rawBytes
+    , rawBytes
     , ReadCtx
     , RWCtx
     -- , HasMessage(..), MessageDefault(..)
@@ -65,6 +65,8 @@ import Data.Bits
 import Data.Int
 import Data.Word
 
+import qualified Data.ByteString as BS
+
 import Control.Monad        (when)
 import Control.Monad.Catch  (MonadCatch, MonadThrow(throwM))
 import Data.Kind            (Type)
@@ -74,7 +76,14 @@ import GHC.OverloadedLabels (IsLabel)
 import           Capnp.Address
     (OffsetError (..), WordAddr (..), pointerFrom)
 import           Capnp.Bits
-    (BitCount, ByteCount, Word1 (..), WordCount (..), replaceBits, wordsToBytes)
+    ( BitCount
+    , ByteCount (..)
+    , Word1 (..)
+    , WordCount (..)
+    , bytesToWordsCeil
+    , replaceBits
+    , wordsToBytes
+    )
 import qualified Capnp.Errors         as E
 import           Capnp.Message
     (Message, Mutability (..), Segment, WordPtr)
@@ -550,3 +559,15 @@ instance List 'Nothing where
         RawAnyList'Normal (RawAnyNormalList'Data RawAnyDataList{eltSize, list}) ->
             RawAnyList'Normal $ RawAnyNormalList'Data (RawAnyDataList { eltSize, list = basicUnsafeTakeNormal i list })
     basicUnsafeSetIndex = undefined
+
+-- | 'rawBytes' returns the raw bytes corresponding to the list.
+rawBytes
+    :: ReadCtx m 'Const
+    => RawSomeList 'Const (ListReprFor ('Data 'Sz8)) -> m BS.ByteString
+-- TODO: we can get away with a more lax context than ReadCtx, maybe even make
+-- this non-monadic.
+rawBytes (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{wordIndex}} len) = do
+    invoice $ fromIntegral $ bytesToWordsCeil (ByteCount len)
+    let bytes = M.toByteString pSegment
+    let ByteCount byteOffset = wordsToBytes wordIndex
+    pure $ BS.take len $ BS.drop byteOffset bytes
