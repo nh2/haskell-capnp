@@ -475,32 +475,3 @@ instance List 'Nothing where
                     Sz16 -> RawAnyData16 <$> basicIndex @('Just ('ListNormal ('ListData 'Sz16))) i list
                     Sz32 -> RawAnyData32 <$> basicIndex @('Just ('ListNormal ('ListData 'Sz32))) i list
                     Sz64 -> RawAnyData64 <$> basicIndex @('Just ('ListNormal ('ListData 'Sz64))) i list
-
-{-
--- | @index i list@ returns the ith element in @list@. Deducts 1 from the quota
-index :: ReadCtx m mut => Int -> ListOf mut a -> m a
-index i list = invoice 1 >> index' list
-  where
-    index' :: ReadCtx m mut => ListOf mut a -> m a
-    index' (ListOfVoid nlist)
-        | i < nLen nlist = pure ()
-        | otherwise = throwM E.BoundsError { E.index = i, E.maxIndex = nLen nlist - 1 }
-    index' (ListOfBool   nlist) = do
-        Word1 val <- indexNList nlist 64
-        pure val
-    index' (ListOfWord8  nlist) = indexNList nlist 8
-    index' (ListOfWord16 nlist) = indexNList nlist 4
-    index' (ListOfWord32 nlist) = indexNList nlist 2
-    index' (ListOfWord64 (NormalList M.WordPtr{pSegment, pAddr=WordAt{wordIndex}} len))
-        | i < len = M.read pSegment $ wordIndex + WordCount i
-        | otherwise = throwM E.BoundsError { E.index = i, E.maxIndex = len - 1}
-    indexNList :: (ReadCtx m mut, Integral a) => NormalList mut -> Int -> m a
-    indexNList (NormalList M.WordPtr{pSegment, pAddr=WordAt{..}} len) eltsPerWord
-        | i < len = do
-            let wordIndex' = wordIndex + WordCount (i `div` eltsPerWord)
-            word <- M.read pSegment wordIndex'
-            let shift = (i `mod` eltsPerWord) * (64 `div` eltsPerWord)
-            pure $ fromIntegral $ word `shiftR` shift
-        | otherwise = throwM E.BoundsError { E.index = i, E.maxIndex = len - 1 }
-
--}
