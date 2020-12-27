@@ -14,9 +14,6 @@
 {-# LANGUAGE TypeApplications       #-}
 {-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE UndecidableInstances   #-}
--- Temporary, while stuff settles:
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
-{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Capnp.UntypedNew
     ( HasRepr
     , Repr(..)
@@ -29,6 +26,8 @@ module Capnp.UntypedNew
     , FieldLoc(..)
     , DataFieldLoc(..)
 
+    , getData, getPtr
+    -- , setData, setPtr
     , structByteCount
     , structWordCount
     , structPtrCount
@@ -37,7 +36,7 @@ module Capnp.UntypedNew
     , structListPtrCount
     , getClient
     , get, index, length
-    -- setIndex
+    , setIndex
     , take
     -- , rootPtr
     -- , setRoot
@@ -67,14 +66,12 @@ import Data.Word
 
 import qualified Data.ByteString as BS
 
-import Control.Monad        (when)
-import Control.Monad.Catch  (MonadCatch, MonadThrow(throwM))
+import Control.Monad.Catch  (MonadThrow(throwM))
 import Data.Kind            (Type)
 import Data.Proxy           (Proxy)
 import GHC.OverloadedLabels (IsLabel)
 
-import           Capnp.Address
-    (OffsetError (..), WordAddr (..), pointerFrom)
+import           Capnp.Address        (WordAddr (..))
 import           Capnp.Bits
     ( BitCount
     , ByteCount (..)
@@ -85,8 +82,7 @@ import           Capnp.Bits
     , wordsToBytes
     )
 import qualified Capnp.Errors         as E
-import           Capnp.Message
-    (Message, Mutability (..), Segment, WordPtr)
+import           Capnp.Message        (Message, Mutability (..), WordPtr)
 import qualified Capnp.Message        as M
 import qualified Capnp.Pointer        as P
 import           Capnp.TraversalLimit (MonadLimit(invoice))
@@ -575,6 +571,33 @@ instance List 'Nothing where
         RawAnyList'Normal (RawAnyNormalList'Data RawAnyDataList{eltSize, list}) ->
             RawAnyList'Normal $ RawAnyNormalList'Data (RawAnyDataList { eltSize, list = basicUnsafeTakeNormal i list })
     basicUnsafeSetIndex = undefined
+
+-- | The data section of a struct, as a list of Word64
+dataSection :: RawStruct mut -> RawSomeList mut ('ListNormal ('ListData 'Sz64))
+dataSection (RawStruct{location, nWords}) =
+    RawNormalList location (fromIntegral nWords)
+
+-- | The pointer section of a struct, as a list of Ptr
+ptrSection :: RawStruct mut -> RawSomeList mut ('ListNormal 'ListPtr)
+ptrSection (RawStruct ptr@M.WordPtr{pAddr=addr@WordAt{wordIndex}} dataSz ptrSz) =
+    RawNormalList
+        { location = ptr { M.pAddr = addr { wordIndex = wordIndex + fromIntegral dataSz } }
+        , len = fromIntegral ptrSz
+        }
+
+-- | @'getData' i struct@ gets the @i@th word from the struct's data section,
+-- returning 0 if it is absent.
+getData :: ReadCtx m mut => Int -> RawStruct mut-> m Word64
+getData i struct
+    | fromIntegral (structWordCount struct) <= i = 0 <$ invoice 1
+    | otherwise = index @('Just ('ListNormal ('ListData 'Sz64))) i (dataSection struct)
+
+-- | @'getPtr' i struct@ gets the @i@th word from the struct's pointer section,
+-- returning Nothing if it is absent.
+getPtr :: ReadCtx m mut => Int -> RawStruct mut -> m (Maybe (RawAnyPointer mut))
+getPtr i struct
+    | fromIntegral (structPtrCount struct) <= i = Nothing <$ invoice 1
+    | otherwise = index @('Just ('ListNormal 'ListPtr)) i (ptrSection struct)
 
 -- | 'rawBytes' returns the raw bytes corresponding to the list.
 rawBytes
