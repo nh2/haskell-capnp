@@ -44,7 +44,7 @@ module Capnp.UntypedNew
     , ReadCtx
     , RWCtx
     -- , HasMessage(..), MessageDefault(..)
-    -- , allocStruct
+    , allocStruct
     -- , allocCompositeList
     -- , allocList0
     -- , allocList1
@@ -611,6 +611,12 @@ rawBytes (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{wordIndex}} len) = do
     let ByteCount byteOffset = wordsToBytes wordIndex
     pure $ BS.take len $ BS.drop byteOffset bytes
 
+-- | Allocate a struct in the message.
+allocStruct :: M.WriteCtx m s => M.Message ('Mut s) -> Word16 -> Word16 -> m (RawStruct ('Mut s))
+allocStruct msg dataSz ptrSz = do
+    let totalSz = fromIntegral dataSz + fromIntegral ptrSz
+    ptr <- M.alloc msg totalSz
+    pure $ RawStruct ptr dataSz ptrSz
 
 {-
 -- | Returns the root pointer of a message.
