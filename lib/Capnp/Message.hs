@@ -105,6 +105,7 @@ import Capnp.Bits           (WordCount (..), hi, lo)
 import Capnp.TraversalLimit (LimitT, MonadLimit(invoice), evalLimitT)
 import Data.Mutable         (Mutable (..))
 import Internal.AppendVec   (AppendVec)
+import Internal.BoundsCheck (checkIndex)
 
 import qualified Capnp.Errors       as E
 import qualified Internal.AppendVec as AppendVec
@@ -609,13 +610,3 @@ freezeMsg freezeSeg freezeCaps msg@(MsgMut MutMsg{mutCaps}) = do
     constSegs <- V.generateM len (internalGetSeg msg >=> freezeSeg)
     constCaps <- freezeCaps . AppendVec.getVector =<< readMutVar mutCaps
     pure $ MsgConst ConstMsg{constSegs, constCaps}
-
--- | @'checkIndex' index length@ checkes that 'index' is in the range
--- [0, length), throwing a 'BoundsError' if not.
-checkIndex :: (Integral a, MonadThrow m) => a -> a -> m ()
-checkIndex i len =
-    when (i < 0 || i >= len) $
-        throwM E.BoundsError
-            { E.index = fromIntegral i
-            , E.maxIndex = fromIntegral len
-            }

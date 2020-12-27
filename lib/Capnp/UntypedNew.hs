@@ -81,6 +81,7 @@ import           Capnp.Message
 import qualified Capnp.Message        as M
 import qualified Capnp.Pointer        as P
 import           Capnp.TraversalLimit (MonadLimit(invoice))
+import           Internal.BoundsCheck (checkIndex)
 
 -- | Type (constraint) synonym for the constraints needed for most read
 -- operations.
@@ -425,9 +426,7 @@ index
     => Int -> RawList mut r -> m (Raw mut (ElemRepr r))
 index i list = do
     invoice 1
-    let len = length @r @mut list
-    when (i < 0 || i >= len) $
-        throwM E.BoundsError { E.index = i, E.maxIndex = len - 1}
+    checkIndex i (length @r @mut list)
     basicUnsafeIndex @r @mut i list
 
 -- | Return a prefix of the list, of the given length.

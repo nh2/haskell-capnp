@@ -171,6 +171,7 @@ library
       -- END GENERATED SCHEMA MODULES
     other-modules:
         Internal.AppendVec
+      , Internal.BoundsCheck
       , Internal.Finalizer
       , Internal.SnocList
       , Internal.Rc
