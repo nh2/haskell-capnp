@@ -125,6 +125,14 @@ data NormalListRepr where
 -- | The size of a non-pointer type.
 data DataSz = Sz0 | Sz1 | Sz8 | Sz16 | Sz32 | Sz64
 
+data DataSzTag (sz :: DataSz) where
+    D0 :: DataSzTag 'Sz0
+    D1 :: DataSzTag 'Sz1
+    D8 :: DataSzTag 'Sz8
+    D16 :: DataSzTag 'Sz16
+    D32 :: DataSzTag 'Sz32
+    D64 :: DataSzTag 'Sz64
+
 class DataSizeBits (sz :: DataSz) where
     szBits :: BitCount
 
@@ -201,7 +209,7 @@ type family RawList (mut :: Mutability) (r :: Maybe ListRepr) :: Type where
     RawList mut ('Just r) = RawSomeList mut r
 
 type family RawSomeList (mut :: Mutability) (r :: ListRepr) :: Type where
-    RawSomeList mut ('ListNormal r) = RawNormalList mut
+    RawSomeList mut ('ListNormal r) = RawNormalList mut r
     RawSomeList mut 'ListComposite = RawStructList mut
 
 data RawStructList mut = RawStructList
@@ -215,22 +223,17 @@ data RawStruct mut = RawStruct
     , nPtrs    :: Word16
     }
 
-data RawNormalList mut = RawNormalList
+data RawNormalList mut (r :: NormalListRepr) = RawNormalList
     { location :: WordPtr mut
     , len      :: Int
     }
 
 data RawAny mut
-    = RawAnyPointer (Maybe (RawAnyPointer mut))
-    | RawAnyData RawAnyData
+    = RawAny'Pointer (Maybe (RawAnyPointer mut))
+    | RawAny'Data RawAnyData
 
-data RawAnyData
-    = RawAnyData0 (RawData 'Sz0)
-    | RawAnyData1 (RawData 'Sz1)
-    | RawAnyData8 (RawData 'Sz8)
-    | RawAnyData16 (RawData 'Sz16)
-    | RawAnyData32 (RawData 'Sz32)
-    | RawAnyData64 (RawData 'Sz64)
+data RawAnyData where
+    RawAnyData :: DataSzTag sz -> RawData sz -> RawAnyData
 
 data RawAnyPointer mut
     = RawAnyPointer'Struct (RawSomePtr mut 'Struct)
@@ -242,13 +245,11 @@ data RawAnyList mut
     | RawAnyList'Normal (RawAnyNormalList mut)
 
 data RawAnyNormalList mut
-    = RawAnyNormalList'Ptr (RawNormalList mut)
+    = RawAnyNormalList'Ptr (RawNormalList mut 'ListPtr)
     | RawAnyNormalList'Data (RawAnyDataList mut)
 
-data RawAnyDataList mut = RawAnyDataList
-    { eltSize :: DataSz
-    , list    :: RawNormalList mut
-    }
+data RawAnyDataList mut where
+    RawAnyDataList :: DataSzTag sz -> RawNormalList mut ('ListData sz) -> RawAnyDataList mut
 
 data RawCapability mut = RawCapability
     { capIndex :: Word32
@@ -317,7 +318,7 @@ getClient RawCapability{message, capIndex} =
 -- | @get ptr@ returns the pointer stored at @ptr@.
 -- Deducts 1 from the quota for each word read (which may be multiple in the
 -- case of far pointers).
-get :: ReadCtx m mut => M.WordPtr mut -> m (Maybe (RawAnyPointer mut))
+get :: forall mut m. ReadCtx m mut => M.WordPtr mut -> m (Maybe (RawAnyPointer mut))
 get ptr@M.WordPtr{pMessage, pAddr} = do
     word <- getWord ptr
     case P.parsePtr word of
@@ -400,15 +401,16 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
         addr { wordIndex = wordIndex + fromIntegral off + 1 }
     getList ptr@M.WordPtr{pAddr=addr@WordAt{wordIndex}} eltSpec = RawAnyPointer'List <$>
         case eltSpec of
-            P.EltNormal sz len -> pure $ RawAnyList'Normal $ case sz of
-                P.Sz0   -> RawAnyNormalList'Data $ RawAnyDataList Sz0 nlist
-                P.Sz1   -> RawAnyNormalList'Data $ RawAnyDataList Sz1 nlist
-                P.Sz8   -> RawAnyNormalList'Data $ RawAnyDataList Sz8 nlist
-                P.Sz16  -> RawAnyNormalList'Data $ RawAnyDataList Sz16 nlist
-                P.Sz32  -> RawAnyNormalList'Data $ RawAnyDataList Sz32 nlist
-                P.Sz64  -> RawAnyNormalList'Data $ RawAnyDataList Sz64 nlist
-                P.SzPtr -> RawAnyNormalList'Ptr nlist
+            P.EltNormal sz len -> pure $ case sz of
+                P.Sz0   -> RawAnyList'Normal $ RawAnyNormalList'Data $ RawAnyDataList D0 nlist
+                P.Sz1   -> RawAnyList'Normal $ RawAnyNormalList'Data $ RawAnyDataList D1 nlist
+                P.Sz8   -> RawAnyList'Normal $ RawAnyNormalList'Data $ RawAnyDataList D8 nlist
+                P.Sz16  -> RawAnyList'Normal $ RawAnyNormalList'Data $ RawAnyDataList D16 nlist
+                P.Sz32  -> RawAnyList'Normal $ RawAnyNormalList'Data $ RawAnyDataList D32 nlist
+                P.Sz64  -> RawAnyList'Normal $ RawAnyNormalList'Data $ RawAnyDataList D64 nlist
+                P.SzPtr -> RawAnyList'Normal $ RawAnyNormalList'Ptr nlist
               where
+                nlist :: forall r. RawNormalList mut r
                 nlist = RawNormalList ptr (fromIntegral len)
             P.EltComposite _ -> do
                 tagWord <- getWord ptr
@@ -446,6 +448,9 @@ class List (r :: Maybe ListRepr) where
 
     basicUnsafeTake :: Int -> RawList mut r -> RawList mut r
 
+normalListLength :: RawNormalList mut r -> Int
+normalListLength RawNormalList{len} = len
+
 -- | @index i list@ returns the ith element in @list@. Deducts 1 from the quota
 index
     :: forall r mut m. (ReadCtx m mut, List r)
@@ -480,7 +485,7 @@ instance List ('Just 'ListComposite) where
     basicUnsafeSetIndex = undefined
 
 
-basicUnsafeTakeNormal :: Int -> RawNormalList mut -> RawNormalList mut
+basicUnsafeTakeNormal :: Int -> RawNormalList mut r -> RawNormalList mut r
 basicUnsafeTakeNormal i RawNormalList{location} = RawNormalList{location, len = i}
 
 instance List ('Just ('ListNormal 'ListPtr)) where
@@ -490,7 +495,7 @@ instance List ('Just ('ListNormal 'ListPtr)) where
     basicUnsafeTake = basicUnsafeTakeNormal
     basicUnsafeSetIndex = undefined
 
-basicUnsafeIndexNList :: (ReadCtx m mut, Integral a) => BitCount -> Int -> RawNormalList mut -> m a
+basicUnsafeIndexNList :: (ReadCtx m mut, Integral a) => BitCount -> Int -> RawNormalList mut r -> m a
 basicUnsafeIndexNList nbits i (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..}} _) = do
     let eltsPerWord = 64 `div` fromIntegral nbits
     let wordIndex' = wordIndex + WordCount (i `div` eltsPerWord)
@@ -500,7 +505,7 @@ basicUnsafeIndexNList nbits i (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..
 
 basicUnsafeSetIndexNList
     :: (M.WriteCtx m s, Integral a, Bounded a)
-    => BitCount -> a -> Int -> RawNormalList ('Mut s) -> m ()
+    => BitCount -> a -> Int -> RawNormalList ('Mut s) r -> m ()
 basicUnsafeSetIndexNList
         nbits
         value
@@ -514,13 +519,13 @@ basicUnsafeSetIndexNList
         M.write pSegment eltWordIndex $ replaceBits value word (fromIntegral shift)
 
 instance {-# OVERLAPS #-} List ('Just ('ListNormal ('ListData 'Sz0))) where
-    length RawNormalList{len} = len
+    length = normalListLength
     basicUnsafeIndex _ _ = pure ()
     basicUnsafeTake = basicUnsafeTakeNormal
     basicUnsafeSetIndex _ _ _ = pure ()
 
 instance {-# OVERLAPS #-} List ('Just ('ListNormal ('ListData 'Sz1))) where
-    length RawNormalList{len} = len
+    length = normalListLength
     basicUnsafeIndex i list = do
         Word1 val <- basicUnsafeIndexNList 1 i list
         pure val
@@ -530,7 +535,7 @@ instance {-# OVERLAPS #-} List ('Just ('ListNormal ('ListData 'Sz1))) where
 instance (DataSizeBits sz, Integral (RawData sz), Bounded (RawData sz))
     => List ('Just ('ListNormal ('ListData sz)))
   where
-    length RawNormalList{len} = len
+    length = normalListLength
     basicUnsafeIndex = basicUnsafeIndexNList (szBits @sz)
     basicUnsafeTake = basicUnsafeTakeNormal
     basicUnsafeSetIndex = basicUnsafeSetIndexNList (szBits @sz)
@@ -538,39 +543,31 @@ instance (DataSizeBits sz, Integral (RawData sz), Bounded (RawData sz))
 instance List 'Nothing where
     length (RawAnyList'Struct (l :: RawStructList mut)) =
         length @('Just 'ListComposite) @mut l
-    length (RawAnyList'Normal (l :: RawAnyNormalList mut)) =
-        let list = case l of
-                RawAnyNormalList'Ptr l'                    -> l'
-                RawAnyNormalList'Data RawAnyDataList{list} -> list
-        in
-        -- The type checker insists we give it *some* type for the first parameter,
-        -- but any normal list type will do, since the instances for length
-        -- are all the same -- so this is fine even if the list was actually
-        -- a data list.
-        length @('Just ('ListNormal 'ListPtr)) @mut list
-
+    length (RawAnyList'Normal l) = case l of
+        RawAnyNormalList'Ptr l'                     -> normalListLength l'
+        RawAnyNormalList'Data (RawAnyDataList _ l') -> normalListLength l'
     basicUnsafeIndex i (RawAnyList'Struct (l :: RawStructList mut)) =
-        RawAnyPointer . Just . RawAnyPointer'Struct <$>
+        RawAny'Pointer . Just . RawAnyPointer'Struct <$>
             basicUnsafeIndex @('Just 'ListComposite) @mut i l
     basicUnsafeIndex i (RawAnyList'Normal (l :: RawAnyNormalList mut)) =
         case l of
             RawAnyNormalList'Ptr l' ->
-                RawAnyPointer <$> basicUnsafeIndex @('Just ('ListNormal 'ListPtr)) i l'
-            RawAnyNormalList'Data RawAnyDataList{eltSize, list} ->
-                RawAnyData <$> case eltSize of
-                    Sz0  -> RawAnyData0  <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz0)))  i list
-                    Sz1  -> RawAnyData1  <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz1)))  i list
-                    Sz8  -> RawAnyData8  <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz8)))  i list
-                    Sz16 -> RawAnyData16 <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz16))) i list
-                    Sz32 -> RawAnyData32 <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz32))) i list
-                    Sz64 -> RawAnyData64 <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz64))) i list
+                RawAny'Pointer <$> basicUnsafeIndex @('Just ('ListNormal 'ListPtr)) i l'
+            RawAnyNormalList'Data (RawAnyDataList eltSize list) ->
+                RawAny'Data <$> case eltSize of
+                    D0  -> RawAnyData D0  <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz0)))  i list
+                    D1  -> RawAnyData D1  <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz1)))  i list
+                    D8  -> RawAnyData D8  <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz8)))  i list
+                    D16 -> RawAnyData D16 <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz16))) i list
+                    D32 -> RawAnyData D32 <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz32))) i list
+                    D64 -> RawAnyData D64 <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz64))) i list
     basicUnsafeTake i list = case list of
         RawAnyList'Struct (l :: RawStructList mut) ->
             RawAnyList'Struct $ basicUnsafeTake @('Just 'ListComposite) @mut i l
         RawAnyList'Normal (RawAnyNormalList'Ptr l) ->
             RawAnyList'Normal (RawAnyNormalList'Ptr (basicUnsafeTakeNormal i l))
-        RawAnyList'Normal (RawAnyNormalList'Data RawAnyDataList{eltSize, list}) ->
-            RawAnyList'Normal $ RawAnyNormalList'Data (RawAnyDataList { eltSize, list = basicUnsafeTakeNormal i list })
+        RawAnyList'Normal (RawAnyNormalList'Data (RawAnyDataList eltSize list)) ->
+            RawAnyList'Normal $ RawAnyNormalList'Data (RawAnyDataList eltSize (basicUnsafeTakeNormal i list))
     basicUnsafeSetIndex = undefined
 
 -- | The data section of a struct, as a list of Word64
@@ -650,25 +647,25 @@ allocCompositeList msg dataSz ptrSz len = do
     pure $ RawStructList { tag = firstStruct, len }
 
 -- | Allocate a list of capnproto @Void@ values.
-allocList0   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
+allocList0   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('ListData 'Sz0))
 
 -- | Allocate a list of booleans
-allocList1   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
+allocList1   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('ListData 'Sz1))
 
 -- | Allocate a list of 8-bit values.
-allocList8   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
+allocList8   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('ListData 'Sz8))
 
 -- | Allocate a list of 16-bit values.
-allocList16  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
+allocList16  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('ListData 'Sz16))
 
 -- | Allocate a list of 32-bit values.
-allocList32  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
+allocList32  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('ListData 'Sz32))
 
 -- | Allocate a list of 64-bit words.
-allocList64  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
+allocList64  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('ListData 'Sz64))
 
 -- | Allocate a list of pointers.
-allocListPtr :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
+allocListPtr :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) 'ListPtr)
 
 allocList0   = allocNormalList 0
 allocList1   = allocNormalList 1
@@ -684,7 +681,7 @@ allocNormalList
     => Int                  -- ^ The number bits per element
     -> M.Message ('Mut s) -- ^ The message to allocate in
     -> Int                  -- ^ The number of elements in the list.
-    -> m (RawNormalList ('Mut s))
+    -> m (RawNormalList ('Mut s) r)
 allocNormalList bitsPerElt msg len = do
     -- round 'len' up to the nearest word boundary.
     let totalBits = BitCount (len * bitsPerElt)
