@@ -27,7 +27,7 @@ module Capnp.UntypedNew
     , DataFieldLoc(..)
 
     , getData, getPtr
-    -- , setData, setPtr
+    , setData, setPtr
     , structByteCount
     , structWordCount
     , structPtrCount
@@ -599,6 +599,17 @@ getPtr :: ReadCtx m mut => Int -> RawStruct mut -> m (Maybe (RawAnyPointer mut))
 getPtr i struct
     | fromIntegral (structPtrCount struct) <= i = Nothing <$ invoice 1
     | otherwise = index @('Just ('ListNormal 'ListPtr)) i (ptrSection struct)
+
+-- | @'setData' value i struct@ sets the @i@th word in the struct's data section
+-- to @value@.
+setData :: (ReadCtx m ('Mut s), M.WriteCtx m s)
+    => Word64 -> Int -> RawStruct ('Mut s) -> m ()
+setData value i = setIndex @('Just ('ListNormal ('ListData 'Sz64))) value i . dataSection
+
+-- | @'setData' value i struct@ sets the @i@th pointer in the struct's pointer
+-- section to @value@.
+setPtr :: (ReadCtx m ('Mut s), M.WriteCtx m s) => Maybe (RawAnyPointer ('Mut s)) -> Int -> RawStruct ('Mut s) -> m ()
+setPtr value i = setIndex @('Just ('ListNormal 'ListPtr)) value i . ptrSection
 
 -- | 'rawBytes' returns the raw bytes corresponding to the list.
 rawBytes
