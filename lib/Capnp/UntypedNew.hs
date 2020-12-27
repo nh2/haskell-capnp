@@ -99,6 +99,33 @@ type ReadCtx m mut = (M.MonadReadMessage mut m, MonadThrow m, MonadLimit m)
 -- | Synonym for ReadCtx + WriteCtx
 type RWCtx m s = (ReadCtx m ('Mut s), M.WriteCtx m s)
 
+-------------------------------------------------------------------------------
+-- Representations
+-------------------------------------------------------------------------------
+
+-- | A 'Repr' describes a wire representation for a value. This is
+-- mostly used at the type level (using DataKinds); types are
+-- parametrized over representations.
+data Repr
+    = Ptr (Maybe PtrRepr)
+    -- ^ Pointer type
+    | Data DataSz
+    -- ^ Non-pointer type.
+
+data PtrRepr
+    = Capability
+    | List (Maybe ListRepr)
+    | Struct
+
+data ListRepr where
+    ListNormal :: NormalListRepr -> ListRepr
+    ListComposite :: ListRepr
+
+data NormalListRepr where
+    ListData :: DataSz -> NormalListRepr
+    ListPtr :: NormalListRepr
+
+-- | The size of a non-pointer type.
 data DataSz = Sz0 | Sz1 | Sz8 | Sz16 | Sz32 | Sz64
 
 class DataSizeBits (sz :: DataSz) where
@@ -111,22 +138,9 @@ instance DataSizeBits 'Sz16 where szBits = 16
 instance DataSizeBits 'Sz32 where szBits = 32
 instance DataSizeBits 'Sz64 where szBits = 64
 
-data ListRepr where
-    ListNormal :: NormalListRepr -> ListRepr
-    ListComposite :: ListRepr
-
-data NormalListRepr where
-    ListData :: DataSz -> NormalListRepr
-    ListPtr :: NormalListRepr
-
-data PtrRepr
-    = Capability
-    | List (Maybe ListRepr)
-    | Struct
-
-data Repr
-    = Ptr (Maybe PtrRepr)
-    | Data DataSz
+-------------------------------------------------------------------------------
+-- Fields. TODO: this probably belongs elsewhere.
+-------------------------------------------------------------------------------
 
 data FieldLoc (r :: Repr) where
     GroupField :: FieldLoc ('Ptr ('Just 'Struct))
@@ -150,20 +164,15 @@ class
     , IsLabel name (Field a b)
     ) => HasField name a b | a name -> b
 
--- | Types that can be converted to and from a 64-bit word.
---
--- Anything that goes in the data section of a struct will have
--- an instance of this.
-class HasRepr a ('Data sz) => IsData a sz where
-    -- | Convert from a 64-bit words Truncates the word if the
-    -- type has less than 64 bits.
-    fromWord :: Word64 -> a
-
-    -- | Convert to a 64-bit word.
-    toWord :: a -> Word64
-
 ----
 
+
+-------------------------------------------------------------------------------
+-- Raw* type families
+-------------------------------------------------------------------------------
+
+-- | @Raw mut r@ is a value with representation @r@ stored in a message with
+-- mutability @mut@.
 type family Raw (mut :: Mutability) (r :: Maybe Repr) :: Type where
     Raw mut ('Just r) = RawSome mut r
     Raw mut 'Nothing = RawAny mut
@@ -251,8 +260,6 @@ data RawCapability mut = RawCapability
 
 ---
 
--- instance HasRepr (Untyped r) r
-
 instance HasRepr () ('Data 'Sz0)
 instance HasRepr Bool ('Data 'Sz1)
 instance HasRepr Word8 ('Data 'Sz8)
@@ -267,12 +274,16 @@ instance HasRepr Float ('Data 'Sz32)
 instance HasRepr Double ('Data 'Sz64)
 
 
+-- | @ElemRepr r@ is the representation of elements of lists with
+-- representation @r@.
 type family ElemRepr (rl :: Maybe ListRepr) :: Maybe Repr where
     ElemRepr ('Just 'ListComposite) = 'Just ('Ptr ('Just 'Struct))
     ElemRepr ('Just ('ListNormal 'ListPtr)) = 'Just ('Ptr 'Nothing)
     ElemRepr ('Just ('ListNormal ('ListData sz))) = 'Just ('Data sz)
     ElemRepr 'Nothing = 'Nothing
 
+-- | @ListReprFor e@ is the representation of lists with elements
+-- whose representation is @e@.
 type family ListReprFor (e :: Repr) :: ListRepr where
     ListReprFor ('Data sz) = 'ListNormal ('ListData sz)
     ListReprFor ('Ptr ('Just 'Struct)) = 'ListComposite
@@ -417,6 +428,11 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                         "Composite list tag was not a struct-" ++
                         "formatted word: " ++ show tag
 
+-------------------------------------------------------------------------------
+-- Lists
+-------------------------------------------------------------------------------
+
+-- | Operations common to all list types.
 class List (r :: Maybe ListRepr) where
     -- | Returns the length of a list
     length :: RawList mut r -> Int
