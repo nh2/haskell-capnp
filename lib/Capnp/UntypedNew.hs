@@ -45,7 +45,7 @@ module Capnp.UntypedNew
     , RWCtx
     -- , HasMessage(..), MessageDefault(..)
     , allocStruct
-    -- , allocCompositeList
+    , allocCompositeList
     -- , allocList0
     -- , allocList1
     -- , allocList8
@@ -617,6 +617,25 @@ allocStruct msg dataSz ptrSz = do
     let totalSz = fromIntegral dataSz + fromIntegral ptrSz
     ptr <- M.alloc msg totalSz
     pure $ RawStruct ptr dataSz ptrSz
+
+-- | Allocate a composite list.
+allocCompositeList
+    :: M.WriteCtx m s
+    => M.Message ('Mut s) -- ^ The message to allocate in.
+    -> Word16     -- ^ The size of the data section
+    -> Word16     -- ^ The size of the pointer section
+    -> Int        -- ^ The length of the list in elements.
+    -> m (RawStructList ('Mut s))
+allocCompositeList msg dataSz ptrSz len = do
+    let eltSize = fromIntegral dataSz + fromIntegral ptrSz
+    ptr@M.WordPtr{pSegment, pAddr=addr@WordAt{wordIndex}}
+        <- M.alloc msg (WordCount $ len * eltSize + 1) -- + 1 for the tag word.
+    M.write pSegment wordIndex $ P.serializePtr' $ P.StructPtr (fromIntegral len) dataSz ptrSz
+    let firstStruct = RawStruct
+            ptr { M.pAddr = addr { wordIndex = wordIndex + 1 } }
+            dataSz
+            ptrSz
+    pure $ RawStructList { tag = firstStruct, len }
 
 {-
 -- | Returns the root pointer of a message.
