@@ -574,7 +574,7 @@ instance List 'Nothing where
 
 -- | The data section of a struct, as a list of Word64
 dataSection :: RawStruct mut -> RawSomeList mut ('ListNormal ('ListData 'Sz64))
-dataSection (RawStruct{location, nWords}) =
+dataSection RawStruct{location, nWords} =
     RawNormalList location (fromIntegral nWords)
 
 -- | The pointer section of a struct, as a list of Ptr
