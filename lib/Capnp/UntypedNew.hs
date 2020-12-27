@@ -38,7 +38,7 @@ module Capnp.UntypedNew
     , getClient
     , get, index, length
     -- setIndex
-    -- take
+    , take
     -- , rootPtr
     -- , setRoot
     -- , rawBytes
@@ -59,7 +59,7 @@ module Capnp.UntypedNew
     -- , TraverseMsg(..)
     ) where
 
-import Prelude hiding (length)
+import Prelude hiding (length, take)
 
 import Data.Bits
 import Data.Int
@@ -417,6 +417,8 @@ class List (r :: Maybe ListRepr) where
         :: forall mut m. (ReadCtx m mut)
         => Int -> RawList mut r -> m (Raw mut (ElemRepr r))
 
+    basicTake :: Int -> RawList mut r -> RawList mut r
+
 -- | @index i list@ returns the ith element in @list@. Deducts 1 from the quota
 index
     :: forall r mut m. (ReadCtx m mut, List r)
@@ -428,17 +430,30 @@ index i list = do
         throwM E.BoundsError { E.index = i, E.maxIndex = len - 1}
     basicIndex @r @mut i list
 
+-- | Return a prefix of the list, of the given length.
+take :: forall m mut r. (MonadThrow m, List r) => Int -> RawList mut r -> m (RawList mut r)
+take count list
+    | length @r @mut list < count =
+        throwM E.BoundsError { E.index = count, E.maxIndex = length @r @mut list - 1 }
+    | otherwise = pure $ basicTake @r @mut count list
+
 instance List ('Just 'ListComposite) where
     length RawStructList{len} = len
     basicIndex i RawStructList{tag = RawStruct ptr@M.WordPtr{pAddr=addr@WordAt{..}} dataSz ptrSz} = do
         let offset = WordCount $ i * (fromIntegral dataSz + fromIntegral ptrSz)
         let addr' = addr { wordIndex = wordIndex + offset }
         return $ RawStruct ptr { M.pAddr = addr' } dataSz ptrSz
+    basicTake i RawStructList{tag} = RawStructList{tag, len = i}
+
+
+basicTakeNormal :: Int -> RawNormalList mut -> RawNormalList mut
+basicTakeNormal i RawNormalList{location} = RawNormalList{location, len = i}
 
 instance List ('Just ('ListNormal 'ListPtr)) where
     length RawNormalList{len} = len
     basicIndex i (RawNormalList ptr@M.WordPtr{pAddr=addr@WordAt{..}} _) =
         get ptr { M.pAddr = addr { wordIndex = wordIndex + WordCount i } }
+    basicTake = basicTakeNormal
 
 basicIndexNList :: (ReadCtx m mut, Integral a) => BitCount -> Int -> RawNormalList mut -> m a
 basicIndexNList nbits i (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..}} _) = do
@@ -451,16 +466,19 @@ basicIndexNList nbits i (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..}} _) 
 instance {-# OVERLAPS #-} List ('Just ('ListNormal ('ListData 'Sz0))) where
     length RawNormalList{len} = len
     basicIndex _ _ = pure ()
+    basicTake = basicTakeNormal
 
 instance {-# OVERLAPS #-} List ('Just ('ListNormal ('ListData 'Sz1))) where
     length RawNormalList{len} = len
     basicIndex i list = do
         Word1 val <- basicIndexNList 64 i list
         pure val
+    basicTake = basicTakeNormal
 
 instance (DataSizeBits sz, Integral (RawData sz)) => List ('Just ('ListNormal ('ListData sz))) where
     length RawNormalList{len} = len
     basicIndex = basicIndexNList (szBits @sz)
+    basicTake = basicTakeNormal
 
 instance List 'Nothing where
     length (RawAnyList'Struct (l :: RawStructList mut)) =
@@ -491,3 +509,10 @@ instance List 'Nothing where
                     Sz16 -> RawAnyData16 <$> basicIndex @('Just ('ListNormal ('ListData 'Sz16))) i list
                     Sz32 -> RawAnyData32 <$> basicIndex @('Just ('ListNormal ('ListData 'Sz32))) i list
                     Sz64 -> RawAnyData64 <$> basicIndex @('Just ('ListNormal ('ListData 'Sz64))) i list
+    basicTake i list = case list of
+        RawAnyList'Struct (l :: RawStructList mut) ->
+            RawAnyList'Struct $ basicTake @('Just 'ListComposite) @mut i l
+        RawAnyList'Normal (RawAnyNormalList'Ptr l) ->
+            RawAnyList'Normal (RawAnyNormalList'Ptr (basicTakeNormal i l))
+        RawAnyList'Normal (RawAnyNormalList'Data RawAnyDataList{eltSize, list}) ->
+            RawAnyList'Normal $ RawAnyNormalList'Data (RawAnyDataList { eltSize, list = basicTakeNormal i list })
