@@ -29,18 +29,34 @@ module Capnp.UntypedNew
     , FieldLoc(..)
     , DataFieldLoc(..)
 
-    , ReadCtx
-    , RWCtx
-
     , structByteCount
     , structWordCount
     , structPtrCount
     , structListByteCount
     , structListWordCount
     , structListPtrCount
-    , length
     , getClient
-    , get
+    , get, index, length
+    -- setIndex
+    -- take
+    -- , rootPtr
+    -- , setRoot
+    -- , rawBytes
+    , ReadCtx
+    , RWCtx
+    -- , HasMessage(..), MessageDefault(..)
+    -- , allocStruct
+    -- , allocCompositeList
+    -- , allocList0
+    -- , allocList1
+    -- , allocList8
+    -- , allocList16
+    -- , allocList32
+    -- , allocList64
+    -- , allocListPtr
+    -- , appendCap
+
+    -- , TraverseMsg(..)
     ) where
 
 import Prelude hiding (length)
