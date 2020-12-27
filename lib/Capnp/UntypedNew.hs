@@ -659,13 +659,13 @@ allocList64  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList 
 -- | Allocate a list of pointers.
 allocListPtr :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
 
-allocList0   msg len = allocNormalList 0  msg len
-allocList1   msg len = allocNormalList 1  msg len
-allocList8   msg len = allocNormalList 8  msg len
-allocList16  msg len = allocNormalList 16 msg len
-allocList32  msg len = allocNormalList 32 msg len
-allocList64  msg len = allocNormalList 64 msg len
-allocListPtr msg len = allocNormalList 64 msg len
+allocList0   = allocNormalList 0
+allocList1   = allocNormalList 1
+allocList8   = allocNormalList 8
+allocList16  = allocNormalList 16
+allocList32  = allocNormalList 32
+allocList64  = allocNormalList 64
+allocListPtr = allocNormalList 64
 
 -- | Allocate a NormalList
 allocNormalList
