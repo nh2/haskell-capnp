@@ -432,11 +432,11 @@ basicIndexNList nbits i (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..}} _) 
     let shift = fromIntegral (i `mod` eltsPerWord) * nbits
     pure $ fromIntegral $ word `shiftR` fromIntegral shift
 
-instance List ('Just ('ListNormal ('ListData 'Sz0))) where
+instance {-# OVERLAPS #-} List ('Just ('ListNormal ('ListData 'Sz0))) where
     length RawNormalList{len} = len
     basicIndex _ _ = pure ()
 
-instance List ('Just ('ListNormal ('ListData 'Sz1))) where
+instance {-# OVERLAPS #-} List ('Just ('ListNormal ('ListData 'Sz1))) where
     length RawNormalList{len} = len
     basicIndex i list = do
         Word1 val <- basicIndexNList 64 i list
@@ -467,7 +467,14 @@ instance List 'Nothing where
         case l of
             RawAnyNormalList'Ptr l' ->
                 RawAnyPointer <$> basicIndex @('Just ('ListNormal 'ListPtr)) i l'
-            RawAnyNormalList'Data _ -> undefined
+            RawAnyNormalList'Data RawAnyDataList{eltSize, list} ->
+                RawAnyData <$> case eltSize of
+                    Sz0  -> RawAnyData0  <$> basicIndex @('Just ('ListNormal ('ListData 'Sz0)))  i list
+                    Sz1  -> RawAnyData1  <$> basicIndex @('Just ('ListNormal ('ListData 'Sz1)))  i list
+                    Sz8  -> RawAnyData8  <$> basicIndex @('Just ('ListNormal ('ListData 'Sz8)))  i list
+                    Sz16 -> RawAnyData16 <$> basicIndex @('Just ('ListNormal ('ListData 'Sz16))) i list
+                    Sz32 -> RawAnyData32 <$> basicIndex @('Just ('ListNormal ('ListData 'Sz32))) i list
+                    Sz64 -> RawAnyData64 <$> basicIndex @('Just ('ListNormal ('ListData 'Sz64))) i list
 
 {-
 -- | @index i list@ returns the ith element in @list@. Deducts 1 from the quota
