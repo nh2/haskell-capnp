@@ -413,11 +413,11 @@ class List (r :: Maybe ListRepr) where
 
     -- | Index into a list, without checking bounds or traversal
     -- limits. Call 'index' instead of calling this directly.
-    basicIndex
+    basicUnsafeIndex
         :: forall mut m. (ReadCtx m mut)
         => Int -> RawList mut r -> m (Raw mut (ElemRepr r))
 
-    basicTake :: Int -> RawList mut r -> RawList mut r
+    basicUnsafeTake :: Int -> RawList mut r -> RawList mut r
 
 -- | @index i list@ returns the ith element in @list@. Deducts 1 from the quota
 index
@@ -428,35 +428,35 @@ index i list = do
     let len = length @r @mut list
     when (i < 0 || i >= len) $
         throwM E.BoundsError { E.index = i, E.maxIndex = len - 1}
-    basicIndex @r @mut i list
+    basicUnsafeIndex @r @mut i list
 
 -- | Return a prefix of the list, of the given length.
 take :: forall m mut r. (MonadThrow m, List r) => Int -> RawList mut r -> m (RawList mut r)
 take count list
     | length @r @mut list < count =
         throwM E.BoundsError { E.index = count, E.maxIndex = length @r @mut list - 1 }
-    | otherwise = pure $ basicTake @r @mut count list
+    | otherwise = pure $ basicUnsafeTake @r @mut count list
 
 instance List ('Just 'ListComposite) where
     length RawStructList{len} = len
-    basicIndex i RawStructList{tag = RawStruct ptr@M.WordPtr{pAddr=addr@WordAt{..}} dataSz ptrSz} = do
+    basicUnsafeIndex i RawStructList{tag = RawStruct ptr@M.WordPtr{pAddr=addr@WordAt{..}} dataSz ptrSz} = do
         let offset = WordCount $ i * (fromIntegral dataSz + fromIntegral ptrSz)
         let addr' = addr { wordIndex = wordIndex + offset }
         return $ RawStruct ptr { M.pAddr = addr' } dataSz ptrSz
-    basicTake i RawStructList{tag} = RawStructList{tag, len = i}
+    basicUnsafeTake i RawStructList{tag} = RawStructList{tag, len = i}
 
 
-basicTakeNormal :: Int -> RawNormalList mut -> RawNormalList mut
-basicTakeNormal i RawNormalList{location} = RawNormalList{location, len = i}
+basicUnsafeTakeNormal :: Int -> RawNormalList mut -> RawNormalList mut
+basicUnsafeTakeNormal i RawNormalList{location} = RawNormalList{location, len = i}
 
 instance List ('Just ('ListNormal 'ListPtr)) where
     length RawNormalList{len} = len
-    basicIndex i (RawNormalList ptr@M.WordPtr{pAddr=addr@WordAt{..}} _) =
+    basicUnsafeIndex i (RawNormalList ptr@M.WordPtr{pAddr=addr@WordAt{..}} _) =
         get ptr { M.pAddr = addr { wordIndex = wordIndex + WordCount i } }
-    basicTake = basicTakeNormal
+    basicUnsafeTake = basicUnsafeTakeNormal
 
-basicIndexNList :: (ReadCtx m mut, Integral a) => BitCount -> Int -> RawNormalList mut -> m a
-basicIndexNList nbits i (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..}} _) = do
+basicUnsafeIndexNList :: (ReadCtx m mut, Integral a) => BitCount -> Int -> RawNormalList mut -> m a
+basicUnsafeIndexNList nbits i (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..}} _) = do
     let eltsPerWord = 64 `div` fromIntegral nbits
     let wordIndex' = wordIndex + WordCount (i `div` eltsPerWord)
     word <- M.read pSegment wordIndex'
@@ -465,20 +465,20 @@ basicIndexNList nbits i (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..}} _) 
 
 instance {-# OVERLAPS #-} List ('Just ('ListNormal ('ListData 'Sz0))) where
     length RawNormalList{len} = len
-    basicIndex _ _ = pure ()
-    basicTake = basicTakeNormal
+    basicUnsafeIndex _ _ = pure ()
+    basicUnsafeTake = basicUnsafeTakeNormal
 
 instance {-# OVERLAPS #-} List ('Just ('ListNormal ('ListData 'Sz1))) where
     length RawNormalList{len} = len
-    basicIndex i list = do
-        Word1 val <- basicIndexNList 64 i list
+    basicUnsafeIndex i list = do
+        Word1 val <- basicUnsafeIndexNList 64 i list
         pure val
-    basicTake = basicTakeNormal
+    basicUnsafeTake = basicUnsafeTakeNormal
 
 instance (DataSizeBits sz, Integral (RawData sz)) => List ('Just ('ListNormal ('ListData sz))) where
     length RawNormalList{len} = len
-    basicIndex = basicIndexNList (szBits @sz)
-    basicTake = basicTakeNormal
+    basicUnsafeIndex = basicUnsafeIndexNList (szBits @sz)
+    basicUnsafeTake = basicUnsafeTakeNormal
 
 instance List 'Nothing where
     length (RawAnyList'Struct (l :: RawStructList mut)) =
@@ -494,25 +494,25 @@ instance List 'Nothing where
         -- a data list.
         length @('Just ('ListNormal 'ListPtr)) @mut list
 
-    basicIndex i (RawAnyList'Struct (l :: RawStructList mut)) =
+    basicUnsafeIndex i (RawAnyList'Struct (l :: RawStructList mut)) =
         RawAnyPointer . Just . RawAnyPointer'Struct <$>
-            basicIndex @('Just 'ListComposite) @mut i l
-    basicIndex i (RawAnyList'Normal (l :: RawAnyNormalList mut)) =
+            basicUnsafeIndex @('Just 'ListComposite) @mut i l
+    basicUnsafeIndex i (RawAnyList'Normal (l :: RawAnyNormalList mut)) =
         case l of
             RawAnyNormalList'Ptr l' ->
-                RawAnyPointer <$> basicIndex @('Just ('ListNormal 'ListPtr)) i l'
+                RawAnyPointer <$> basicUnsafeIndex @('Just ('ListNormal 'ListPtr)) i l'
             RawAnyNormalList'Data RawAnyDataList{eltSize, list} ->
                 RawAnyData <$> case eltSize of
-                    Sz0  -> RawAnyData0  <$> basicIndex @('Just ('ListNormal ('ListData 'Sz0)))  i list
-                    Sz1  -> RawAnyData1  <$> basicIndex @('Just ('ListNormal ('ListData 'Sz1)))  i list
-                    Sz8  -> RawAnyData8  <$> basicIndex @('Just ('ListNormal ('ListData 'Sz8)))  i list
-                    Sz16 -> RawAnyData16 <$> basicIndex @('Just ('ListNormal ('ListData 'Sz16))) i list
-                    Sz32 -> RawAnyData32 <$> basicIndex @('Just ('ListNormal ('ListData 'Sz32))) i list
-                    Sz64 -> RawAnyData64 <$> basicIndex @('Just ('ListNormal ('ListData 'Sz64))) i list
-    basicTake i list = case list of
+                    Sz0  -> RawAnyData0  <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz0)))  i list
+                    Sz1  -> RawAnyData1  <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz1)))  i list
+                    Sz8  -> RawAnyData8  <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz8)))  i list
+                    Sz16 -> RawAnyData16 <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz16))) i list
+                    Sz32 -> RawAnyData32 <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz32))) i list
+                    Sz64 -> RawAnyData64 <$> basicUnsafeIndex @('Just ('ListNormal ('ListData 'Sz64))) i list
+    basicUnsafeTake i list = case list of
         RawAnyList'Struct (l :: RawStructList mut) ->
-            RawAnyList'Struct $ basicTake @('Just 'ListComposite) @mut i l
+            RawAnyList'Struct $ basicUnsafeTake @('Just 'ListComposite) @mut i l
         RawAnyList'Normal (RawAnyNormalList'Ptr l) ->
-            RawAnyList'Normal (RawAnyNormalList'Ptr (basicTakeNormal i l))
+            RawAnyList'Normal (RawAnyNormalList'Ptr (basicUnsafeTakeNormal i l))
         RawAnyList'Normal (RawAnyNormalList'Data RawAnyDataList{eltSize, list}) ->
-            RawAnyList'Normal $ RawAnyNormalList'Data (RawAnyDataList { eltSize, list = basicTakeNormal i list })
+            RawAnyList'Normal $ RawAnyNormalList'Data (RawAnyDataList { eltSize, list = basicUnsafeTakeNormal i list })
