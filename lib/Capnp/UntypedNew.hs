@@ -46,13 +46,13 @@ module Capnp.UntypedNew
     -- , HasMessage(..), MessageDefault(..)
     , allocStruct
     , allocCompositeList
-    -- , allocList0
-    -- , allocList1
-    -- , allocList8
-    -- , allocList16
-    -- , allocList32
-    -- , allocList64
-    -- , allocListPtr
+    , allocList0
+    , allocList1
+    , allocList8
+    , allocList16
+    , allocList32
+    , allocList64
+    , allocListPtr
     -- , appendCap
 
     -- , TraverseMsg(..)
@@ -73,10 +73,11 @@ import GHC.OverloadedLabels (IsLabel)
 
 import           Capnp.Address        (WordAddr (..))
 import           Capnp.Bits
-    ( BitCount
+    ( BitCount (..)
     , ByteCount (..)
     , Word1 (..)
     , WordCount (..)
+    , bitsToBytesCeil
     , bytesToWordsCeil
     , replaceBits
     , wordsToBytes
@@ -636,6 +637,49 @@ allocCompositeList msg dataSz ptrSz len = do
             dataSz
             ptrSz
     pure $ RawStructList { tag = firstStruct, len }
+
+-- | Allocate a list of capnproto @Void@ values.
+allocList0   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
+
+-- | Allocate a list of booleans
+allocList1   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
+
+-- | Allocate a list of 8-bit values.
+allocList8   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
+
+-- | Allocate a list of 16-bit values.
+allocList16  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
+
+-- | Allocate a list of 32-bit values.
+allocList32  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
+
+-- | Allocate a list of 64-bit words.
+allocList64  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
+
+-- | Allocate a list of pointers.
+allocListPtr :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s))
+
+allocList0   msg len = allocNormalList 0  msg len
+allocList1   msg len = allocNormalList 1  msg len
+allocList8   msg len = allocNormalList 8  msg len
+allocList16  msg len = allocNormalList 16 msg len
+allocList32  msg len = allocNormalList 32 msg len
+allocList64  msg len = allocNormalList 64 msg len
+allocListPtr msg len = allocNormalList 64 msg len
+
+-- | Allocate a NormalList
+allocNormalList
+    :: M.WriteCtx m s
+    => Int                  -- ^ The number bits per element
+    -> M.Message ('Mut s) -- ^ The message to allocate in
+    -> Int                  -- ^ The number of elements in the list.
+    -> m (RawNormalList ('Mut s))
+allocNormalList bitsPerElt msg len = do
+    -- round 'len' up to the nearest word boundary.
+    let totalBits = BitCount (len * bitsPerElt)
+        totalWords = bytesToWordsCeil $ bitsToBytesCeil totalBits
+    ptr <- M.alloc msg totalWords
+    pure RawNormalList { location = ptr, len }
 
 {-
 -- | Returns the root pointer of a message.
