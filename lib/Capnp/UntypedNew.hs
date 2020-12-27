@@ -74,7 +74,7 @@ import GHC.OverloadedLabels (IsLabel)
 import           Capnp.Address
     (OffsetError (..), WordAddr (..), pointerFrom)
 import           Capnp.Bits
-    (BitCount, ByteCount, Word1 (..), WordCount (..), wordsToBytes)
+    (BitCount, ByteCount, Word1 (..), WordCount (..), replaceBits, wordsToBytes)
 import qualified Capnp.Errors         as E
 import           Capnp.Message
     (Message, Mutability (..), Segment, WordPtr)
@@ -418,6 +418,10 @@ class List (r :: Maybe ListRepr) where
         :: forall mut m. (ReadCtx m mut)
         => Int -> RawList mut r -> m (Raw mut (ElemRepr r))
 
+    basicUnsafeSetIndex
+        :: forall m s. (RWCtx m s)
+        => Raw ('Mut s) (ElemRepr r) -> Int -> RawList ('Mut s) r -> m ()
+
     basicUnsafeTake :: Int -> RawList mut r -> RawList mut r
 
 -- | @index i list@ returns the ith element in @list@. Deducts 1 from the quota
@@ -428,6 +432,14 @@ index i list = do
     invoice 1
     checkIndex i (length @r @mut list)
     basicUnsafeIndex @r @mut i list
+
+-- | @'setIndex value i list@ sets the @i@th element of @list@ to @value@.
+setIndex
+    :: forall r m s. (List r, RWCtx m s)
+    => Raw ('Mut s) (ElemRepr r) -> Int -> RawList ('Mut s) r -> m ()
+setIndex value i list = do
+    checkIndex i (length @r @('Mut s) list)
+    basicUnsafeSetIndex @r value i list
 
 -- | Return a prefix of the list, of the given length.
 take :: forall m mut r. (MonadThrow m, List r) => Int -> RawList mut r -> m (RawList mut r)
@@ -443,6 +455,7 @@ instance List ('Just 'ListComposite) where
         let addr' = addr { wordIndex = wordIndex + offset }
         return $ RawStruct ptr { M.pAddr = addr' } dataSz ptrSz
     basicUnsafeTake i RawStructList{tag} = RawStructList{tag, len = i}
+    basicUnsafeSetIndex = undefined
 
 
 basicUnsafeTakeNormal :: Int -> RawNormalList mut -> RawNormalList mut
@@ -453,6 +466,7 @@ instance List ('Just ('ListNormal 'ListPtr)) where
     basicUnsafeIndex i (RawNormalList ptr@M.WordPtr{pAddr=addr@WordAt{..}} _) =
         get ptr { M.pAddr = addr { wordIndex = wordIndex + WordCount i } }
     basicUnsafeTake = basicUnsafeTakeNormal
+    basicUnsafeSetIndex = undefined
 
 basicUnsafeIndexNList :: (ReadCtx m mut, Integral a) => BitCount -> Int -> RawNormalList mut -> m a
 basicUnsafeIndexNList nbits i (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..}} _) = do
@@ -462,22 +476,42 @@ basicUnsafeIndexNList nbits i (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..
     let shift = fromIntegral (i `mod` eltsPerWord) * nbits
     pure $ fromIntegral $ word `shiftR` fromIntegral shift
 
+basicUnsafeSetIndexNList
+    :: (M.WriteCtx m s, Integral a, Bounded a)
+    => BitCount -> a -> Int -> RawNormalList ('Mut s) -> m ()
+basicUnsafeSetIndexNList
+        nbits
+        value
+        i
+        RawNormalList{location=M.WordPtr{pSegment, pAddr=WordAt{wordIndex}}}
+    = do
+        let eltsPerWord = 64 `div` fromIntegral nbits
+        let eltWordIndex = wordIndex + WordCount (i `div` eltsPerWord)
+        word <- M.read pSegment eltWordIndex
+        let shift = fromIntegral (i `mod` eltsPerWord) * nbits
+        M.write pSegment eltWordIndex $ replaceBits value word (fromIntegral shift)
+
 instance {-# OVERLAPS #-} List ('Just ('ListNormal ('ListData 'Sz0))) where
     length RawNormalList{len} = len
     basicUnsafeIndex _ _ = pure ()
     basicUnsafeTake = basicUnsafeTakeNormal
+    basicUnsafeSetIndex _ _ _ = pure ()
 
 instance {-# OVERLAPS #-} List ('Just ('ListNormal ('ListData 'Sz1))) where
     length RawNormalList{len} = len
     basicUnsafeIndex i list = do
-        Word1 val <- basicUnsafeIndexNList 64 i list
+        Word1 val <- basicUnsafeIndexNList 1 i list
         pure val
     basicUnsafeTake = basicUnsafeTakeNormal
+    basicUnsafeSetIndex val = basicUnsafeSetIndexNList 1 (Word1 val)
 
-instance (DataSizeBits sz, Integral (RawData sz)) => List ('Just ('ListNormal ('ListData sz))) where
+instance (DataSizeBits sz, Integral (RawData sz), Bounded (RawData sz))
+    => List ('Just ('ListNormal ('ListData sz)))
+  where
     length RawNormalList{len} = len
     basicUnsafeIndex = basicUnsafeIndexNList (szBits @sz)
     basicUnsafeTake = basicUnsafeTakeNormal
+    basicUnsafeSetIndex = basicUnsafeSetIndexNList (szBits @sz)
 
 instance List 'Nothing where
     length (RawAnyList'Struct (l :: RawStructList mut)) =
@@ -515,3 +549,4 @@ instance List 'Nothing where
             RawAnyList'Normal (RawAnyNormalList'Ptr (basicUnsafeTakeNormal i l))
         RawAnyList'Normal (RawAnyNormalList'Data RawAnyDataList{eltSize, list}) ->
             RawAnyList'Normal $ RawAnyNormalList'Data (RawAnyDataList { eltSize, list = basicUnsafeTakeNormal i list })
+    basicUnsafeSetIndex = undefined

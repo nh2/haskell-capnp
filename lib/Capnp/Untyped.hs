@@ -589,7 +589,7 @@ ptrAddr (PtrCap _) = error "ptrAddr called on a capability pointer."
 ptrAddr (PtrStruct (Struct M.WordPtr{pAddr}_ _)) = pAddr
 ptrAddr (PtrList list) = listAddr list
 
--- | @'setIndex value i list@ Set the @i@th element of @list@ to @value@.
+-- | @'setIndex value i list@ sets the @i@th element of @list@ to @value@.
 setIndex :: RWCtx m s => a -> Int -> ListOf ('Mut s) a -> m ()
 setIndex _ i list | length list <= i =
     throwM E.BoundsError { E.index = i, E.maxIndex = length list }
