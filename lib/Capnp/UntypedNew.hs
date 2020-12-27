@@ -571,3 +571,21 @@ rawBytes (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{wordIndex}} len) = do
     let bytes = M.toByteString pSegment
     let ByteCount byteOffset = wordsToBytes wordIndex
     pure $ BS.take len $ BS.drop byteOffset bytes
+
+
+{-
+-- | Returns the root pointer of a message.
+rootPtr :: ReadCtx m mut => M.Message mut -> m (RawStruct mut)
+rootPtr msg = do
+    seg <- M.getSegment msg 0
+    root <- get M.WordPtr
+        { pMessage = msg
+        , pSegment = seg
+        , pAddr = WordAt 0 0
+        }
+    case root of
+        Just (RawAnyPointer'Struct struct) -> pure struct
+        Nothing -> messageDefault msg
+        _ -> throwM $ E.SchemaViolationError
+                "Unexpected root type; expected struct."
+-}
