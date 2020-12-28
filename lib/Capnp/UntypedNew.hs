@@ -176,7 +176,7 @@ type family RawPtr (mut :: Mutability) (r :: Maybe R.PtrRepr) :: Type where
 
 
 type family RawSomePtr (mut :: Mutability) (r :: R.PtrRepr) :: Type where
-    RawSomePtr mut 'R.Struct = RawStruct mut
+    RawSomePtr mut 'R.Struct = Struct mut
     RawSomePtr mut 'R.Capability = RawCapability mut
     RawSomePtr mut ('R.List r) = RawList mut r
 
@@ -185,21 +185,21 @@ type family RawList (mut :: Mutability) (r :: Maybe R.ListRepr) :: Type where
     RawList mut ('Just r) = RawSomeList mut r
 
 type family RawSomeList (mut :: Mutability) (r :: R.ListRepr) :: Type where
-    RawSomeList mut ('R.ListNormal r) = RawNormalList mut r
-    RawSomeList mut 'R.ListComposite = RawStructList mut
+    RawSomeList mut ('R.ListNormal r) = NormalList mut r
+    RawSomeList mut 'R.ListComposite = StructList mut
 
-data RawStructList mut = RawStructList
+data StructList mut = StructList
     { len :: Int
-    , tag :: RawStruct mut
+    , tag :: Struct mut
     }
 
-data RawStruct mut = RawStruct
+data Struct mut = Struct
     { location :: WordPtr mut
     , nWords   :: Word16
     , nPtrs    :: Word16
     }
 
-data RawNormalList mut (r :: R.NormalListRepr) = RawNormalList
+data NormalList mut (r :: R.NormalListRepr) = NormalList
     { location :: WordPtr mut
     , len      :: Int
     }
@@ -214,11 +214,11 @@ data RawAnyList mut
     | RawAnyList'Normal (RawAnyNormalList mut)
 
 data RawAnyNormalList mut
-    = RawAnyNormalList'Ptr (RawNormalList mut 'R.ListPtr)
+    = RawAnyNormalList'Ptr (NormalList mut 'R.ListPtr)
     | RawAnyNormalList'Data (RawAnyDataList mut)
 
 data RawAnyDataList mut where
-    RawAnyDataList :: DataSzTag sz -> RawNormalList mut ('R.ListData sz) -> RawAnyDataList mut
+    RawAnyDataList :: DataSzTag sz -> NormalList mut ('R.ListData sz) -> RawAnyDataList mut
 
 data RawCapability mut = RawCapability
     { capIndex :: Word32
@@ -229,28 +229,28 @@ data RawCapability mut = RawCapability
 
 
 -- | Get the size (in words) of a struct's data section.
-structWordCount :: RawStruct mut -> WordCount
-structWordCount RawStruct{nWords} = fromIntegral nWords
+structWordCount :: Struct mut -> WordCount
+structWordCount Struct{nWords} = fromIntegral nWords
 
 -- | Get the size (in bytes) of a struct's data section.
-structByteCount :: RawStruct mut -> ByteCount
+structByteCount :: Struct mut -> ByteCount
 structByteCount = wordsToBytes . structWordCount
 
 -- | Get the size of a struct's pointer section.
-structPtrCount  :: RawStruct mut -> Word16
-structPtrCount RawStruct{nPtrs} = nPtrs
+structPtrCount  :: Struct mut -> Word16
+structPtrCount Struct{nPtrs} = nPtrs
 
 -- | Get the size (in words) of the data sections in a struct list.
-structListWordCount :: RawStructList mut -> WordCount
-structListWordCount RawStructList{tag} = structWordCount tag
+structListWordCount :: StructList mut -> WordCount
+structListWordCount StructList{tag} = structWordCount tag
 
 -- | Get the size (in words) of the data sections in a struct list.
-structListByteCount :: RawStructList mut -> ByteCount
-structListByteCount RawStructList{tag} = structByteCount tag
+structListByteCount :: StructList mut -> ByteCount
+structListByteCount StructList{tag} = structByteCount tag
 
 -- | Get the size of the pointer sections in a struct list.
-structListPtrCount :: RawStructList mut -> Word16
-structListPtrCount RawStructList{tag} = structPtrCount tag
+structListPtrCount :: StructList mut -> Word16
+structListPtrCount StructList{tag} = structPtrCount tag
 
 getClient :: ReadCtx m mut => RawCapability mut -> m M.Client
 getClient RawCapability{msg, capIndex} =
@@ -271,7 +271,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                     , capIndex = cap
                     }
             P.StructPtr off dataSz ptrSz -> return $ Just $
-                RawAnyPointer'Struct $ RawStruct
+                RawAnyPointer'Struct $ Struct
                     ptr { M.pAddr = resolveOffset pAddr off } dataSz ptrSz
             P.ListPtr off eltSpec -> Just <$>
                 getList ptr { M.pAddr = resolveOffset pAddr off } eltSpec
@@ -310,7 +310,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                                     Just (P.StructPtr 0 dataSz ptrSz) ->
                                         return $ Just $
                                             RawAnyPointer'Struct $
-                                                RawStruct finalPtr dataSz ptrSz
+                                                Struct finalPtr dataSz ptrSz
                                     Just (P.ListPtr 0 eltSpec) ->
                                         Just <$> getList finalPtr eltSpec
                                     -- TODO: I'm not sure whether far pointers to caps are
@@ -351,15 +351,15 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                 P.Sz64  -> RawAnyList'Normal $ RawAnyNormalList'Data $ RawAnyDataList D64 nlist
                 P.SzPtr -> RawAnyList'Normal $ RawAnyNormalList'Ptr nlist
               where
-                nlist :: forall r. RawNormalList mut r
-                nlist = RawNormalList ptr (fromIntegral len)
+                nlist :: forall r. NormalList mut r
+                nlist = NormalList ptr (fromIntegral len)
             P.EltComposite _ -> do
                 tagWord <- getWord ptr
                 case P.parsePtr' tagWord of
                     P.StructPtr numElts dataSz ptrSz ->
-                        pure $ RawAnyList'Struct RawStructList
+                        pure $ RawAnyList'Struct StructList
                             { len = fromIntegral numElts
-                            , tag = RawStruct
+                            , tag = Struct
                                 ptr { M.pAddr = addr { wordIndex = wordIndex + 1 } }
                                 dataSz
                                 ptrSz
@@ -389,8 +389,8 @@ class List (r :: R.ListRepr) where
 
     basicUnsafeTake :: Int -> RawSomeList mut r -> RawSomeList mut r
 
-normalListLength :: RawNormalList mut r -> Int
-normalListLength RawNormalList{len} = len
+normalListLength :: NormalList mut r -> Int
+normalListLength NormalList{len} = len
 
 -- | @index i list@ returns the ith element in @list@. Deducts 1 from the quota
 index
@@ -417,23 +417,23 @@ take count list
     | otherwise = pure $ basicUnsafeTake @r @mut count list
 
 instance List 'R.ListComposite where
-    length RawStructList{len} = len
-    basicUnsafeIndex i RawStructList{tag = RawStruct ptr@M.WordPtr{pAddr=addr@WordAt{..}} dataSz ptrSz} = do
+    length StructList{len} = len
+    basicUnsafeIndex i StructList{tag = Struct ptr@M.WordPtr{pAddr=addr@WordAt{..}} dataSz ptrSz} = do
         let offset = WordCount $ i * (fromIntegral dataSz + fromIntegral ptrSz)
         let addr' = addr { wordIndex = wordIndex + offset }
-        return $ RawStruct ptr { M.pAddr = addr' } dataSz ptrSz
-    basicUnsafeTake i RawStructList{tag} = RawStructList{tag, len = i}
+        return $ Struct ptr { M.pAddr = addr' } dataSz ptrSz
+    basicUnsafeTake i StructList{tag} = StructList{tag, len = i}
     basicUnsafeSetIndex value i list = do
         dest <- basicUnsafeIndex @'R.ListComposite i list
         copyStruct dest value
 
 
-basicUnsafeTakeNormal :: Int -> RawNormalList mut r -> RawNormalList mut r
-basicUnsafeTakeNormal i RawNormalList{location} = RawNormalList{location, len = i}
+basicUnsafeTakeNormal :: Int -> NormalList mut r -> NormalList mut r
+basicUnsafeTakeNormal i NormalList{location} = NormalList{location, len = i}
 
 instance List ('R.ListNormal 'R.ListPtr) where
-    length RawNormalList{len} = len
-    basicUnsafeIndex i (RawNormalList ptr@M.WordPtr{pAddr=addr@WordAt{..}} _) =
+    length NormalList{len} = len
+    basicUnsafeIndex i (NormalList ptr@M.WordPtr{pAddr=addr@WordAt{..}} _) =
         get ptr { M.pAddr = addr { wordIndex = wordIndex + WordCount i } }
     basicUnsafeTake = basicUnsafeTakeNormal
     basicUnsafeSetIndex value i list = case value of
@@ -446,25 +446,25 @@ instance List ('R.ListNormal 'R.ListPtr) where
             basicUnsafeSetIndexNList 64 (P.serializePtr (Just (P.CapPtr capIndex))) i list
         Just p@(RawAnyPointer'List ptrList) ->
             setPtrIndex list p $ P.ListPtr 0 (listEltSpec ptrList)
-        Just p@(RawAnyPointer'Struct (RawStruct _ dataSz ptrSz)) ->
+        Just p@(RawAnyPointer'Struct (Struct _ dataSz ptrSz)) ->
             setPtrIndex list p $ P.StructPtr 0 dataSz ptrSz
       where
         setPtrIndex
             :: (ReadCtx m ('Mut s), M.WriteCtx m s)
-            => RawNormalList ('Mut s) r -> RawAnyPointer ('Mut s) -> P.Ptr -> m ()
-        setPtrIndex RawNormalList{location=nPtr@M.WordPtr{pAddr=addr@WordAt{wordIndex}}} absPtr relPtr =
+            => NormalList ('Mut s) r -> RawAnyPointer ('Mut s) -> P.Ptr -> m ()
+        setPtrIndex NormalList{location=nPtr@M.WordPtr{pAddr=addr@WordAt{wordIndex}}} absPtr relPtr =
             let srcPtr = nPtr { M.pAddr = addr { wordIndex = wordIndex + WordCount i } }
             in setPointerTo srcPtr (ptrAddr absPtr) relPtr
         listEltSpec = \case
-            RawAnyList'Struct RawStructList{tag = RawStruct _ dataSz ptrSz} ->
+            RawAnyList'Struct StructList{tag = Struct _ dataSz ptrSz} ->
                 P.EltComposite $ (*)
                     (fromIntegral $ length @('R.ListNormal 'R.ListPtr) list)
                     (fromIntegral dataSz + fromIntegral ptrSz)
             RawAnyList'Normal l ->
                 case l of
-                RawAnyNormalList'Ptr RawNormalList{len} ->
+                RawAnyNormalList'Ptr NormalList{len} ->
                     P.EltNormal P.SzPtr (fromIntegral len)
-                RawAnyNormalList'Data (RawAnyDataList sz RawNormalList{len}) ->
+                RawAnyNormalList'Data (RawAnyDataList sz NormalList{len}) ->
                     let esize = case sz of
                             D0  -> P.Sz0
                             D1  -> P.Sz1
@@ -479,21 +479,21 @@ instance List ('R.ListNormal 'R.ListPtr) where
 -- a pointer which targets a capability.
 ptrAddr :: RawAnyPointer mut -> WordAddr
 ptrAddr (RawAnyPointer'Capability _) = error "ptrAddr called on a capability pointer."
-ptrAddr (RawAnyPointer'Struct (RawStruct M.WordPtr{pAddr}_ _)) = pAddr
+ptrAddr (RawAnyPointer'Struct (Struct M.WordPtr{pAddr}_ _)) = pAddr
 ptrAddr (RawAnyPointer'List list) = listAddr list
 
 -- | Return the starting address of the list.
 listAddr :: RawAnyList mut -> WordAddr
-listAddr (RawAnyList'Struct RawStructList{tag = RawStruct M.WordPtr{pAddr} _ _}) =
+listAddr (RawAnyList'Struct StructList{tag = Struct M.WordPtr{pAddr} _ _}) =
     -- pAddr is the address of the first element of the list, but
     -- composite lists start with a tag word:
     pAddr { wordIndex = wordIndex pAddr - 1 }
 listAddr (RawAnyList'Normal l) = case l of
-    RawAnyNormalList'Ptr RawNormalList{location=M.WordPtr{pAddr}} -> pAddr
-    RawAnyNormalList'Data (RawAnyDataList _ RawNormalList{location=M.WordPtr{pAddr}}) -> pAddr
+    RawAnyNormalList'Ptr NormalList{location=M.WordPtr{pAddr}} -> pAddr
+    RawAnyNormalList'Data (RawAnyDataList _ NormalList{location=M.WordPtr{pAddr}}) -> pAddr
 
-basicUnsafeIndexNList :: (ReadCtx m mut, Integral a) => BitCount -> Int -> RawNormalList mut r -> m a
-basicUnsafeIndexNList nbits i (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..}} _) = do
+basicUnsafeIndexNList :: (ReadCtx m mut, Integral a) => BitCount -> Int -> NormalList mut r -> m a
+basicUnsafeIndexNList nbits i (NormalList M.WordPtr{pSegment, pAddr=WordAt{..}} _) = do
     let eltsPerWord = 64 `div` fromIntegral nbits
     let wordIndex' = wordIndex + WordCount (i `div` eltsPerWord)
     word <- M.read pSegment wordIndex'
@@ -502,12 +502,12 @@ basicUnsafeIndexNList nbits i (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..
 
 basicUnsafeSetIndexNList
     :: (M.WriteCtx m s, Integral a, Bounded a)
-    => BitCount -> a -> Int -> RawNormalList ('Mut s) r -> m ()
+    => BitCount -> a -> Int -> NormalList ('Mut s) r -> m ()
 basicUnsafeSetIndexNList
         nbits
         value
         i
-        RawNormalList{location=M.WordPtr{pSegment, pAddr=WordAt{wordIndex}}}
+        NormalList{location=M.WordPtr{pSegment, pAddr=WordAt{wordIndex}}}
     = do
         let eltsPerWord = 64 `div` fromIntegral nbits
         let eltWordIndex = wordIndex + WordCount (i `div` eltsPerWord)
@@ -538,28 +538,28 @@ instance (DataSizeBits sz, Integral (RawData sz), Bounded (RawData sz))
     basicUnsafeSetIndex = basicUnsafeSetIndexNList (szBits @sz)
 
 -- | The data section of a struct, as a list of Word64
-dataSection :: RawStruct mut -> RawSomeList mut ('R.ListNormal ('R.ListData 'R.Sz64))
-dataSection RawStruct{location, nWords} =
-    RawNormalList location (fromIntegral nWords)
+dataSection :: Struct mut -> RawSomeList mut ('R.ListNormal ('R.ListData 'R.Sz64))
+dataSection Struct{location, nWords} =
+    NormalList location (fromIntegral nWords)
 
 -- | The pointer section of a struct, as a list of Ptr
-ptrSection :: RawStruct mut -> RawSomeList mut ('R.ListNormal 'R.ListPtr)
-ptrSection (RawStruct ptr@M.WordPtr{pAddr=addr@WordAt{wordIndex}} dataSz ptrSz) =
-    RawNormalList
+ptrSection :: Struct mut -> RawSomeList mut ('R.ListNormal 'R.ListPtr)
+ptrSection (Struct ptr@M.WordPtr{pAddr=addr@WordAt{wordIndex}} dataSz ptrSz) =
+    NormalList
         { location = ptr { M.pAddr = addr { wordIndex = wordIndex + fromIntegral dataSz } }
         , len = fromIntegral ptrSz
         }
 
 -- | @'getData' i struct@ gets the @i@th word from the struct's data section,
 -- returning 0 if it is absent.
-getData :: ReadCtx m mut => Int -> RawStruct mut-> m Word64
+getData :: ReadCtx m mut => Int -> Struct mut-> m Word64
 getData i struct
     | fromIntegral (structWordCount struct) <= i = 0 <$ invoice 1
     | otherwise = index @('R.ListNormal ('R.ListData 'R.Sz64)) i (dataSection struct)
 
 -- | @'getPtr' i struct@ gets the @i@th word from the struct's pointer section,
 -- returning Nothing if it is absent.
-getPtr :: ReadCtx m mut => Int -> RawStruct mut -> m (Maybe (RawAnyPointer mut))
+getPtr :: ReadCtx m mut => Int -> Struct mut -> m (Maybe (RawAnyPointer mut))
 getPtr i struct
     | fromIntegral (structPtrCount struct) <= i = Nothing <$ invoice 1
     | otherwise = index @('R.ListNormal 'R.ListPtr) i (ptrSection struct)
@@ -567,12 +567,12 @@ getPtr i struct
 -- | @'setData' value i struct@ sets the @i@th word in the struct's data section
 -- to @value@.
 setData :: (ReadCtx m ('Mut s), M.WriteCtx m s)
-    => Word64 -> Int -> RawStruct ('Mut s) -> m ()
+    => Word64 -> Int -> Struct ('Mut s) -> m ()
 setData value i = setIndex @('R.ListNormal ('R.ListData 'R.Sz64)) value i . dataSection
 
 -- | @'setData' value i struct@ sets the @i@th pointer in the struct's pointer
 -- section to @value@.
-setPtr :: (ReadCtx m ('Mut s), M.WriteCtx m s) => Maybe (RawAnyPointer ('Mut s)) -> Int -> RawStruct ('Mut s) -> m ()
+setPtr :: (ReadCtx m ('Mut s), M.WriteCtx m s) => Maybe (RawAnyPointer ('Mut s)) -> Int -> Struct ('Mut s) -> m ()
 setPtr value i = setIndex @('R.ListNormal 'R.ListPtr) value i . ptrSection
 
 -- | 'rawBytes' returns the raw bytes corresponding to the list.
@@ -581,18 +581,18 @@ rawBytes
     => RawSomeList 'Const (R.ListReprFor ('R.Data 'R.Sz8)) -> m BS.ByteString
 -- TODO: we can get away with a more lax context than ReadCtx, maybe even make
 -- this non-monadic.
-rawBytes (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{wordIndex}} len) = do
+rawBytes (NormalList M.WordPtr{pSegment, pAddr=WordAt{wordIndex}} len) = do
     invoice $ fromIntegral $ bytesToWordsCeil (ByteCount len)
     let bytes = M.toByteString pSegment
     let ByteCount byteOffset = wordsToBytes wordIndex
     pure $ BS.take len $ BS.drop byteOffset bytes
 
 -- | Allocate a struct in the message.
-allocStruct :: M.WriteCtx m s => M.Message ('Mut s) -> Word16 -> Word16 -> m (RawStruct ('Mut s))
+allocStruct :: M.WriteCtx m s => M.Message ('Mut s) -> Word16 -> Word16 -> m (Struct ('Mut s))
 allocStruct msg dataSz ptrSz = do
     let totalSz = fromIntegral dataSz + fromIntegral ptrSz
     ptr <- M.alloc msg totalSz
-    pure $ RawStruct ptr dataSz ptrSz
+    pure $ Struct ptr dataSz ptrSz
 
 -- | Allocate a composite list.
 allocCompositeList
@@ -601,38 +601,38 @@ allocCompositeList
     -> Word16     -- ^ The size of the data section
     -> Word16     -- ^ The size of the pointer section
     -> Int        -- ^ The length of the list in elements.
-    -> m (RawStructList ('Mut s))
+    -> m (StructList ('Mut s))
 allocCompositeList msg dataSz ptrSz len = do
     let eltSize = fromIntegral dataSz + fromIntegral ptrSz
     ptr@M.WordPtr{pSegment, pAddr=addr@WordAt{wordIndex}}
         <- M.alloc msg (WordCount $ len * eltSize + 1) -- + 1 for the tag word.
     M.write pSegment wordIndex $ P.serializePtr' $ P.StructPtr (fromIntegral len) dataSz ptrSz
-    let firstStruct = RawStruct
+    let firstStruct = Struct
             ptr { M.pAddr = addr { wordIndex = wordIndex + 1 } }
             dataSz
             ptrSz
-    pure $ RawStructList { tag = firstStruct, len }
+    pure $ StructList { tag = firstStruct, len }
 
 -- | Allocate a list of capnproto @Void@ values.
-allocList0   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('R.ListData 'R.Sz0))
+allocList0   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (NormalList ('Mut s) ('R.ListData 'R.Sz0))
 
 -- | Allocate a list of booleans
-allocList1   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('R.ListData 'R.Sz1))
+allocList1   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (NormalList ('Mut s) ('R.ListData 'R.Sz1))
 
 -- | Allocate a list of 8-bit values.
-allocList8   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('R.ListData 'R.Sz8))
+allocList8   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (NormalList ('Mut s) ('R.ListData 'R.Sz8))
 
 -- | Allocate a list of 16-bit values.
-allocList16  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('R.ListData 'R.Sz16))
+allocList16  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (NormalList ('Mut s) ('R.ListData 'R.Sz16))
 
 -- | Allocate a list of 32-bit values.
-allocList32  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('R.ListData 'R.Sz32))
+allocList32  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (NormalList ('Mut s) ('R.ListData 'R.Sz32))
 
 -- | Allocate a list of 64-bit words.
-allocList64  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('R.ListData 'R.Sz64))
+allocList64  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (NormalList ('Mut s) ('R.ListData 'R.Sz64))
 
 -- | Allocate a list of pointers.
-allocListPtr :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) 'R.ListPtr)
+allocListPtr :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (NormalList ('Mut s) 'R.ListPtr)
 
 allocList0   = allocNormalList 0
 allocList1   = allocNormalList 1
@@ -648,13 +648,13 @@ allocNormalList
     => Int                  -- ^ The number bits per element
     -> M.Message ('Mut s) -- ^ The message to allocate in
     -> Int                  -- ^ The number of elements in the list.
-    -> m (RawNormalList ('Mut s) r)
+    -> m (NormalList ('Mut s) r)
 allocNormalList bitsPerElt msg len = do
     -- round 'len' up to the nearest word boundary.
     let totalBits = BitCount (len * bitsPerElt)
         totalWords = bytesToWordsCeil $ bitsToBytesCeil totalBits
     ptr <- M.alloc msg totalWords
-    pure RawNormalList { location = ptr, len }
+    pure NormalList { location = ptr, len }
 
 
 appendCap :: M.WriteCtx m s => M.Message ('Mut s) -> M.Client -> m (RawCapability ('Mut s))
@@ -663,7 +663,7 @@ appendCap msg client = do
     pure RawCapability { msg, capIndex = fromIntegral i }
 
 -- | Returns the root pointer of a message.
-rootPtr :: ReadCtx m mut => M.Message mut -> m (RawStruct mut)
+rootPtr :: ReadCtx m mut => M.Message mut -> m (Struct mut)
 rootPtr msg = do
     seg <- M.getSegment msg 0
     root <- get M.WordPtr
@@ -678,8 +678,8 @@ rootPtr msg = do
                 "Unexpected root type; expected struct."
 
 -- | Make the given struct the root object of its message.
-setRoot :: M.WriteCtx m s => RawStruct ('Mut s) -> m ()
-setRoot (RawStruct M.WordPtr{pMessage, pAddr=addr} dataSz ptrSz) = do
+setRoot :: M.WriteCtx m s => Struct ('Mut s) -> m ()
+setRoot (Struct M.WordPtr{pMessage, pAddr=addr} dataSz ptrSz) = do
     pSegment <- M.getSegment pMessage 0
     let rootPtr = M.WordPtr{pMessage, pSegment, pAddr = WordAt 0 0}
     setPointerTo rootPtr addr (P.StructPtr 0 dataSz ptrSz)
@@ -779,14 +779,14 @@ class HasMessage a mut => MessageDefault a mut where
 instance HasMessage (WordPtr mut) mut where
     message M.WordPtr{pMessage} = pMessage
 
-instance HasMessage (RawStructList mut) mut where
-    message RawStructList{tag} = message tag
+instance HasMessage (StructList mut) mut where
+    message StructList{tag} = message tag
 
-instance HasMessage (RawStruct mut) mut where
-    message RawStruct{location} = message location
+instance HasMessage (Struct mut) mut where
+    message Struct{location} = message location
 
-instance HasMessage (RawNormalList mut r) mut where
-    message RawNormalList{location} = message location
+instance HasMessage (NormalList mut r) mut where
+    message NormalList{location} = message location
 
 instance HasMessage (RawAnyPointer mut) mut where
     message (RawAnyPointer'Struct p)     = message p
@@ -812,20 +812,20 @@ instance MessageDefault (M.WordPtr mut) mut where
         pSegment <- M.getSegment msg 0
         pure M.WordPtr{pMessage = msg, pSegment, pAddr = WordAt 0 0}
 
-instance MessageDefault (RawStructList mut) mut where
+instance MessageDefault (StructList mut) mut where
     messageDefault msg = do
         tag <- messageDefault msg
-        pure RawStructList {tag, len = 0}
+        pure StructList {tag, len = 0}
 
-instance MessageDefault (RawStruct mut) mut where
+instance MessageDefault (Struct mut) mut where
     messageDefault msg = do
         location <- messageDefault msg
-        pure $ RawStruct location 0 0
+        pure $ Struct location 0 0
 
-instance MessageDefault (RawNormalList mut r) mut where
+instance MessageDefault (NormalList mut r) mut where
     messageDefault msg = do
         location <- messageDefault msg
-        pure RawNormalList{location, len = 0}
+        pure NormalList{location, len = 0}
 
 
 -------------------------------------------------------------------------------
@@ -897,7 +897,7 @@ copyListOf dest src =
         setIndex @r value i dest
 
 -- | @'copyStruct' dest src@ copies the source struct to the destination struct.
-copyStruct :: forall m s. RWCtx m s => RawStruct ('Mut s) -> RawStruct ('Mut s) -> m ()
+copyStruct :: forall m s. RWCtx m s => Struct ('Mut s) -> Struct ('Mut s) -> m ()
 copyStruct dest src = do
     -- We copy both the data and pointer sections from src to dest,
     -- padding the tail of the destination section with zeros/null
