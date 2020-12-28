@@ -177,7 +177,7 @@ type family RawPtr (mut :: Mutability) (r :: Maybe R.PtrRepr) :: Type where
 
 type family RawSomePtr (mut :: Mutability) (r :: R.PtrRepr) :: Type where
     RawSomePtr mut 'R.Struct = Struct mut
-    RawSomePtr mut 'R.Capability = RawCapability mut
+    RawSomePtr mut 'R.Cap = Cap mut
     RawSomePtr mut ('R.List r) = RawList mut r
 
 type family RawList (mut :: Mutability) (r :: Maybe R.ListRepr) :: Type where
@@ -206,7 +206,7 @@ data NormalList mut (r :: R.NormalListRepr) = NormalList
 
 data RawAnyPointer mut
     = RawAnyPointer'Struct (RawSomePtr mut 'R.Struct)
-    | RawAnyPointer'Capability (RawSomePtr mut 'R.Capability)
+    | RawAnyPointer'Cap (RawSomePtr mut 'R.Cap)
     | RawAnyPointer'List (RawSomePtr mut ('R.List 'Nothing))
 
 data RawAnyList mut
@@ -220,7 +220,7 @@ data RawAnyNormalList mut
 data RawAnyDataList mut where
     RawAnyDataList :: DataSzTag sz -> NormalList mut ('R.ListData sz) -> RawAnyDataList mut
 
-data RawCapability mut = RawCapability
+data Cap mut = Cap
     { capIndex :: Word32
     , msg      :: Message mut
     }
@@ -252,8 +252,8 @@ structListByteCount StructList{tag} = structByteCount tag
 structListPtrCount :: StructList mut -> Word16
 structListPtrCount StructList{tag} = structPtrCount tag
 
-getClient :: ReadCtx m mut => RawCapability mut -> m M.Client
-getClient RawCapability{msg, capIndex} =
+getClient :: ReadCtx m mut => Cap mut -> m M.Client
+getClient Cap{msg, capIndex} =
     M.getCap msg (fromIntegral capIndex)
 
 -- | @get ptr@ returns the pointer stored at @ptr@.
@@ -266,7 +266,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
         Nothing -> return Nothing
         Just p -> case p of
             P.CapPtr cap -> return $ Just $
-                RawAnyPointer'Capability RawCapability
+                RawAnyPointer'Cap Cap
                     { msg = pMessage
                     , capIndex = cap
                     }
@@ -320,7 +320,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                                     -- that, and submit a patch to the spec.
                                     Just (P.CapPtr cap) ->
                                         return $ Just $
-                                            RawAnyPointer'Capability $ RawCapability
+                                            RawAnyPointer'Cap $ Cap
                                                 { msg = pMessage
                                                 , capIndex = cap
                                                 }
@@ -442,7 +442,7 @@ instance List ('R.ListNormal 'R.ListPtr) where
             basicUnsafeSetIndex @('R.ListNormal 'R.ListPtr) newPtr i list
         Nothing ->
             basicUnsafeSetIndexNList 64 (P.serializePtr Nothing) i list
-        Just (RawAnyPointer'Capability RawCapability{capIndex}) ->
+        Just (RawAnyPointer'Cap Cap{capIndex}) ->
             basicUnsafeSetIndexNList 64 (P.serializePtr (Just (P.CapPtr capIndex))) i list
         Just p@(RawAnyPointer'List ptrList) ->
             setPtrIndex list p $ P.ListPtr 0 (listEltSpec ptrList)
@@ -478,7 +478,7 @@ instance List ('R.ListNormal 'R.ListPtr) where
 -- | Return the address of the pointer's target. It is illegal to call this on
 -- a pointer which targets a capability.
 ptrAddr :: RawAnyPointer mut -> WordAddr
-ptrAddr (RawAnyPointer'Capability _) = error "ptrAddr called on a capability pointer."
+ptrAddr (RawAnyPointer'Cap _) = error "ptrAddr called on a capability pointer."
 ptrAddr (RawAnyPointer'Struct (Struct M.WordPtr{pAddr}_ _)) = pAddr
 ptrAddr (RawAnyPointer'List list) = listAddr list
 
@@ -657,10 +657,10 @@ allocNormalList bitsPerElt msg len = do
     pure NormalList { location = ptr, len }
 
 
-appendCap :: M.WriteCtx m s => M.Message ('Mut s) -> M.Client -> m (RawCapability ('Mut s))
+appendCap :: M.WriteCtx m s => M.Message ('Mut s) -> M.Client -> m (Cap ('Mut s))
 appendCap msg client = do
     i <- M.appendCap msg client
-    pure RawCapability { msg, capIndex = fromIntegral i }
+    pure Cap { msg, capIndex = fromIntegral i }
 
 -- | Returns the root pointer of a message.
 rootPtr :: ReadCtx m mut => M.Message mut -> m (Struct mut)
@@ -789,9 +789,9 @@ instance HasMessage (NormalList mut r) mut where
     message NormalList{location} = message location
 
 instance HasMessage (RawAnyPointer mut) mut where
-    message (RawAnyPointer'Struct p)     = message p
-    message (RawAnyPointer'Capability p) = message p
-    message (RawAnyPointer'List p)       = message p
+    message (RawAnyPointer'Struct p) = message p
+    message (RawAnyPointer'Cap p)    = message p
+    message (RawAnyPointer'List p)   = message p
 
 instance HasMessage (RawAnyList mut) mut where
     message (RawAnyList'Struct l) = message l
@@ -804,8 +804,8 @@ instance HasMessage (RawAnyNormalList mut) mut where
 instance HasMessage (RawAnyDataList mut) mut where
     message (RawAnyDataList _ l) = message l
 
-instance HasMessage (RawCapability mut) mut where
-    message RawCapability{msg} = msg
+instance HasMessage (Cap mut) mut where
+    message Cap{msg} = msg
 
 instance MessageDefault (M.WordPtr mut) mut where
     messageDefault msg = do
@@ -832,13 +832,13 @@ instance MessageDefault (NormalList mut r) mut where
 -- Copying data from one message to another
 -------------------------------------------------------------------------------
 
-copyCap :: RWCtx m s => M.Message ('Mut s) -> RawCapability ('Mut s) -> m (RawCapability ('Mut s))
+copyCap :: RWCtx m s => M.Message ('Mut s) -> Cap ('Mut s) -> m (Cap ('Mut s))
 copyCap dest cap = getClient cap >>= appendCap dest
 
 copyPtr :: RWCtx m s => M.Message ('Mut s) -> Maybe (RawAnyPointer ('Mut s)) -> m (Maybe (RawAnyPointer ('Mut s)))
 copyPtr _ Nothing                = pure Nothing
-copyPtr dest (Just (RawAnyPointer'Capability cap)) =
-    Just . RawAnyPointer'Capability <$> copyCap dest cap
+copyPtr dest (Just (RawAnyPointer'Cap cap)) =
+    Just . RawAnyPointer'Cap <$> copyCap dest cap
 copyPtr dest (Just (RawAnyPointer'List src)) =
     Just . RawAnyPointer'List <$> copyList dest src
 copyPtr dest (Just (RawAnyPointer'Struct src)) = Just . RawAnyPointer'Struct <$> do
