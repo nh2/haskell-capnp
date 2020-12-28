@@ -68,6 +68,7 @@ import Data.Word
 import qualified Data.ByteString as BS
 
 import Control.Monad.Catch  (MonadThrow(throwM))
+import Data.Foldable        (for_)
 import Data.Kind            (Type)
 import Data.Proxy           (Proxy)
 import GHC.OverloadedLabels (IsLabel)
@@ -484,7 +485,9 @@ instance List ('Just 'ListComposite) where
         let addr' = addr { wordIndex = wordIndex + offset }
         return $ RawStruct ptr { M.pAddr = addr' } dataSz ptrSz
     basicUnsafeTake i RawStructList{tag} = RawStructList{tag, len = i}
-    basicUnsafeSetIndex = undefined
+    basicUnsafeSetIndex value i list = do
+        dest <- basicUnsafeIndex @('Just 'ListComposite) i list
+        copyStruct dest value
 
 
 basicUnsafeTakeNormal :: Int -> RawNormalList mut r -> RawNormalList mut r
@@ -495,7 +498,61 @@ instance List ('Just ('ListNormal 'ListPtr)) where
     basicUnsafeIndex i (RawNormalList ptr@M.WordPtr{pAddr=addr@WordAt{..}} _) =
         get ptr { M.pAddr = addr { wordIndex = wordIndex + WordCount i } }
     basicUnsafeTake = basicUnsafeTakeNormal
-    basicUnsafeSetIndex = undefined
+    basicUnsafeSetIndex value i list = case value of
+        Just p | message p /= message list -> do
+            newPtr <- copyPtr (message list) value
+            basicUnsafeSetIndex @(JN 'ListPtr) newPtr i list
+        Nothing ->
+            basicUnsafeSetIndexNList 64 (P.serializePtr Nothing) i list
+        Just (RawAnyPointer'Capability RawCapability{capIndex}) ->
+            basicUnsafeSetIndexNList 64 (P.serializePtr (Just (P.CapPtr capIndex))) i list
+        Just p@(RawAnyPointer'List ptrList) ->
+            setPtrIndex list p $ P.ListPtr 0 (listEltSpec ptrList)
+        Just p@(RawAnyPointer'Struct (RawStruct _ dataSz ptrSz)) ->
+            setPtrIndex list p $ P.StructPtr 0 dataSz ptrSz
+      where
+        setPtrIndex
+            :: (ReadCtx m ('Mut s), M.WriteCtx m s)
+            => RawNormalList ('Mut s) r -> RawAnyPointer ('Mut s) -> P.Ptr -> m ()
+        setPtrIndex RawNormalList{location=nPtr@M.WordPtr{pAddr=addr@WordAt{wordIndex}}} absPtr relPtr =
+            let srcPtr = nPtr { M.pAddr = addr { wordIndex = wordIndex + WordCount i } }
+            in setPointerTo srcPtr (ptrAddr absPtr) relPtr
+        listEltSpec = \case
+            RawAnyList'Struct RawStructList{tag = RawStruct _ dataSz ptrSz} ->
+                P.EltComposite $ (*)
+                    (fromIntegral $ length @(JN 'ListPtr) list)
+                    (fromIntegral dataSz + fromIntegral ptrSz)
+            RawAnyList'Normal l ->
+                case l of
+                RawAnyNormalList'Ptr RawNormalList{len} ->
+                    P.EltNormal P.SzPtr (fromIntegral len)
+                RawAnyNormalList'Data (RawAnyDataList sz RawNormalList{len}) ->
+                    let esize = case sz of
+                            D0  -> P.Sz0
+                            D1  -> P.Sz1
+                            D8  -> P.Sz8
+                            D16 -> P.Sz16
+                            D32 -> P.Sz32
+                            D64 -> P.Sz64
+                    in
+                    P.EltNormal esize (fromIntegral len)
+
+-- | Return the address of the pointer's target. It is illegal to call this on
+-- a pointer which targets a capability.
+ptrAddr :: RawAnyPointer mut -> WordAddr
+ptrAddr (RawAnyPointer'Capability _) = error "ptrAddr called on a capability pointer."
+ptrAddr (RawAnyPointer'Struct (RawStruct M.WordPtr{pAddr}_ _)) = pAddr
+ptrAddr (RawAnyPointer'List list) = listAddr list
+
+-- | Return the starting address of the list.
+listAddr :: RawAnyList mut -> WordAddr
+listAddr (RawAnyList'Struct RawStructList{tag = RawStruct M.WordPtr{pAddr} _ _}) =
+    -- pAddr is the address of the first element of the list, but
+    -- composite lists start with a tag word:
+    pAddr { wordIndex = wordIndex pAddr - 1 }
+listAddr (RawAnyList'Normal l) = case l of
+    RawAnyNormalList'Ptr RawNormalList{location=M.WordPtr{pAddr}} -> pAddr
+    RawAnyNormalList'Data (RawAnyDataList _ RawNormalList{location=M.WordPtr{pAddr}}) -> pAddr
 
 basicUnsafeIndexNList :: (ReadCtx m mut, Integral a) => BitCount -> Int -> RawNormalList mut r -> m a
 basicUnsafeIndexNList nbits i (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{..}} _) = do
@@ -861,3 +918,106 @@ instance MessageDefault (RawNormalList mut r) mut where
     messageDefault msg = do
         location <- messageDefault msg
         pure RawNormalList{location, len = 0}
+
+
+-------------------------------------------------------------------------------
+-- Copying data from one message to another
+-------------------------------------------------------------------------------
+
+copyCap :: RWCtx m s => M.Message ('Mut s) -> RawCapability ('Mut s) -> m (RawCapability ('Mut s))
+copyCap dest cap = getClient cap >>= appendCap dest
+
+copyPtr :: RWCtx m s => M.Message ('Mut s) -> Maybe (RawAnyPointer ('Mut s)) -> m (Maybe (RawAnyPointer ('Mut s)))
+copyPtr _ Nothing                = pure Nothing
+copyPtr dest (Just (RawAnyPointer'Capability cap)) =
+    Just . RawAnyPointer'Capability <$> copyCap dest cap
+copyPtr dest (Just (RawAnyPointer'List src)) =
+    Just . RawAnyPointer'List <$> copyList dest src
+copyPtr dest (Just (RawAnyPointer'Struct src)) = Just . RawAnyPointer'Struct <$> do
+    destStruct <- allocStruct
+            dest
+            (fromIntegral $ structWordCount src)
+            (fromIntegral $ structPtrCount src)
+    copyStruct destStruct src
+    pure destStruct
+
+copyList :: RWCtx m s => M.Message ('Mut s) -> RawAnyList ('Mut s) -> m (RawAnyList ('Mut s))
+copyList dest src = case src of
+    RawAnyList'Struct src -> RawAnyList'Struct <$> do
+        destList <- allocCompositeList
+            dest
+            (fromIntegral $ structListWordCount src)
+            (structListPtrCount src)
+            (length @('Just 'ListComposite) src)
+        copyListOf @('Just 'ListComposite) destList src
+        pure destList
+    RawAnyList'Normal src -> RawAnyList'Normal <$> case src of
+        RawAnyNormalList'Data src ->
+            RawAnyNormalList'Data <$> case src of
+                RawAnyDataList D0 src ->
+                    RawAnyDataList D0 <$> allocList0 dest (length @(JD 'Sz0) src)
+                RawAnyDataList D1 src ->
+                    RawAnyDataList D1 <$> allocList1 dest (length @(JD 'Sz1) src)
+                RawAnyDataList D8 src ->
+                    RawAnyDataList D8 <$> allocList8 dest (length @(JD 'Sz8) src)
+                RawAnyDataList D16 src ->
+                    RawAnyDataList D16 <$> allocList16 dest (length @(JD 'Sz16) src)
+                RawAnyDataList D32 src ->
+                    RawAnyDataList D32 <$> allocList32 dest (length @(JD 'Sz32) src)
+                RawAnyDataList D64 src ->
+                    RawAnyDataList D64 <$> allocList64 dest (length @(JD 'Sz64) src)
+        RawAnyNormalList'Ptr src ->
+            RawAnyNormalList'Ptr <$> copyNewListOf @(JN 'ListPtr) dest src allocListPtr
+
+type JD r = JN ('ListData r)
+type JN r = 'Just ('ListNormal r)
+
+copyNewListOf
+    :: forall r m s. (RWCtx m s, List r)
+    => M.Message ('Mut s)
+    -> RawList ('Mut s) r
+    -> (M.Message ('Mut s) -> Int -> m (RawList ('Mut s) r))
+    -> m (RawList ('Mut s) r)
+copyNewListOf destMsg src new = do
+    dest <- new destMsg (length @r @('Mut s) src)
+    copyListOf @r dest src
+    pure dest
+
+copyListOf :: forall r m s. (RWCtx m s, List r) => RawList ('Mut s) r -> RawList ('Mut s) r -> m ()
+copyListOf dest src =
+    for_ [0..length @r @('Mut s) src - 1] $ \i -> do
+        value <- index @r @('Mut s) i src
+        setIndex @r value i dest
+
+-- | @'copyStruct' dest src@ copies the source struct to the destination struct.
+copyStruct :: forall m s. RWCtx m s => RawStruct ('Mut s) -> RawStruct ('Mut s) -> m ()
+copyStruct dest src = do
+    -- We copy both the data and pointer sections from src to dest,
+    -- padding the tail of the destination section with zeros/null
+    -- pointers as necessary. If the destination section is
+    -- smaller than the source section, this will raise a BoundsError.
+    --
+    -- TODO: possible enhancement: allow the destination section to be
+    -- smaller than the source section if and only if the tail of the
+    -- source section is all zeros (default values).
+    copySection @('ListNormal ('ListData 'Sz64))
+        (dataSection dest)
+        (dataSection src)
+        0
+    copySection @('ListNormal 'ListPtr)
+        (ptrSection  dest)
+        (ptrSection  src)
+        (Nothing @(RawAnyPointer ('Mut s)))
+  where
+    copySection
+        :: forall r. List ('Just r)
+        => RawSomeList ('Mut s) r
+        -> RawSomeList ('Mut s) r
+        -> Raw ('Mut s) (ElemRepr ('Just r))
+        -> m ()
+    copySection dest src pad = do
+        -- Copy the source section to the destination section:
+        copyListOf @('Just r) dest src
+        -- Pad the remainder with zeros/default values:
+        for_ [length @('Just r) @('Mut s) src..length @('Just r) @('Mut s) dest - 1] $ \i ->
+            setIndex @('Just r) pad i dest
