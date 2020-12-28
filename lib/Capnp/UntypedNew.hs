@@ -183,7 +183,7 @@ type family RawSomePtr (mut :: Mutability) (r :: R.PtrRepr) :: Type where
     RawSomePtr mut ('R.List r) = RawList mut r
 
 type family RawList (mut :: Mutability) (r :: Maybe R.ListRepr) :: Type where
-    RawList mut 'Nothing = RawAnyList mut
+    RawList mut 'Nothing = AnyList mut
     RawList mut ('Just r) = RawSomeList mut r
 
 type family RawSomeList (mut :: Mutability) (r :: R.ListRepr) :: Type where
@@ -211,16 +211,16 @@ data Ptr mut
     | PtrCap (RawSomePtr mut 'R.Cap)
     | PtrList (RawSomePtr mut ('R.List 'Nothing))
 
-data RawAnyList mut
-    = RawAnyList'Struct (RawSomeList mut 'R.ListComposite)
-    | RawAnyList'Normal (RawAnyNormalList mut)
+data AnyList mut
+    = AnyList'Struct (RawSomeList mut 'R.ListComposite)
+    | AnyList'Normal (AnyNormalList mut)
 
-data RawAnyNormalList mut
-    = RawAnyNormalList'Ptr (NormalList mut 'R.ListPtr)
-    | RawAnyNormalList'Data (RawAnyDataList mut)
+data AnyNormalList mut
+    = AnyNormalList'Ptr (NormalList mut 'R.ListPtr)
+    | AnyNormalList'Data (AnyDataList mut)
 
-data RawAnyDataList mut where
-    RawAnyDataList :: DataSzTag sz -> NormalList mut ('R.ListData sz) -> RawAnyDataList mut
+data AnyDataList mut where
+    AnyDataList :: DataSzTag sz -> NormalList mut ('R.ListData sz) -> AnyDataList mut
 
 data Cap mut = Cap
     { capIndex :: Word32
@@ -345,13 +345,13 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
     getList ptr@M.WordPtr{pAddr=addr@WordAt{wordIndex}} eltSpec = PtrList <$>
         case eltSpec of
             P.EltNormal sz len -> pure $ case sz of
-                P.Sz0   -> RawAnyList'Normal $ RawAnyNormalList'Data $ RawAnyDataList D0 nlist
-                P.Sz1   -> RawAnyList'Normal $ RawAnyNormalList'Data $ RawAnyDataList D1 nlist
-                P.Sz8   -> RawAnyList'Normal $ RawAnyNormalList'Data $ RawAnyDataList D8 nlist
-                P.Sz16  -> RawAnyList'Normal $ RawAnyNormalList'Data $ RawAnyDataList D16 nlist
-                P.Sz32  -> RawAnyList'Normal $ RawAnyNormalList'Data $ RawAnyDataList D32 nlist
-                P.Sz64  -> RawAnyList'Normal $ RawAnyNormalList'Data $ RawAnyDataList D64 nlist
-                P.SzPtr -> RawAnyList'Normal $ RawAnyNormalList'Ptr nlist
+                P.Sz0   -> AnyList'Normal $ AnyNormalList'Data $ AnyDataList D0 nlist
+                P.Sz1   -> AnyList'Normal $ AnyNormalList'Data $ AnyDataList D1 nlist
+                P.Sz8   -> AnyList'Normal $ AnyNormalList'Data $ AnyDataList D8 nlist
+                P.Sz16  -> AnyList'Normal $ AnyNormalList'Data $ AnyDataList D16 nlist
+                P.Sz32  -> AnyList'Normal $ AnyNormalList'Data $ AnyDataList D32 nlist
+                P.Sz64  -> AnyList'Normal $ AnyNormalList'Data $ AnyDataList D64 nlist
+                P.SzPtr -> AnyList'Normal $ AnyNormalList'Ptr nlist
               where
                 nlist :: forall r. NormalList mut r
                 nlist = NormalList ptr (fromIntegral len)
@@ -359,7 +359,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                 tagWord <- getWord ptr
                 case P.parsePtr' tagWord of
                     P.StructPtr numElts dataSz ptrSz ->
-                        pure $ RawAnyList'Struct StructList
+                        pure $ AnyList'Struct StructList
                             { len = fromIntegral numElts
                             , tag = Struct
                                 ptr { M.pAddr = addr { wordIndex = wordIndex + 1 } }
@@ -458,15 +458,15 @@ instance List ('R.ListNormal 'R.ListPtr) where
             let srcPtr = nPtr { M.pAddr = addr { wordIndex = wordIndex + WordCount i } }
             in setPointerTo srcPtr (ptrAddr absPtr) relPtr
         listEltSpec = \case
-            RawAnyList'Struct StructList{tag = Struct _ dataSz ptrSz} ->
+            AnyList'Struct StructList{tag = Struct _ dataSz ptrSz} ->
                 P.EltComposite $ (*)
                     (fromIntegral $ length @('R.ListNormal 'R.ListPtr) list)
                     (fromIntegral dataSz + fromIntegral ptrSz)
-            RawAnyList'Normal l ->
+            AnyList'Normal l ->
                 case l of
-                RawAnyNormalList'Ptr NormalList{len} ->
+                AnyNormalList'Ptr NormalList{len} ->
                     P.EltNormal P.SzPtr (fromIntegral len)
-                RawAnyNormalList'Data (RawAnyDataList sz NormalList{len}) ->
+                AnyNormalList'Data (AnyDataList sz NormalList{len}) ->
                     let esize = case sz of
                             D0  -> P.Sz0
                             D1  -> P.Sz1
@@ -485,14 +485,14 @@ ptrAddr (PtrStruct (Struct M.WordPtr{pAddr}_ _)) = pAddr
 ptrAddr (PtrList list) = listAddr list
 
 -- | Return the starting address of the list.
-listAddr :: RawAnyList mut -> WordAddr
-listAddr (RawAnyList'Struct StructList{tag = Struct M.WordPtr{pAddr} _ _}) =
+listAddr :: AnyList mut -> WordAddr
+listAddr (AnyList'Struct StructList{tag = Struct M.WordPtr{pAddr} _ _}) =
     -- pAddr is the address of the first element of the list, but
     -- composite lists start with a tag word:
     pAddr { wordIndex = wordIndex pAddr - 1 }
-listAddr (RawAnyList'Normal l) = case l of
-    RawAnyNormalList'Ptr NormalList{location=M.WordPtr{pAddr}} -> pAddr
-    RawAnyNormalList'Data (RawAnyDataList _ NormalList{location=M.WordPtr{pAddr}}) -> pAddr
+listAddr (AnyList'Normal l) = case l of
+    AnyNormalList'Ptr NormalList{location=M.WordPtr{pAddr}} -> pAddr
+    AnyNormalList'Data (AnyDataList _ NormalList{location=M.WordPtr{pAddr}}) -> pAddr
 
 basicUnsafeIndexNList :: (ReadCtx m mut, Integral a) => BitCount -> Int -> NormalList mut r -> m a
 basicUnsafeIndexNList nbits i (NormalList M.WordPtr{pSegment, pAddr=WordAt{..}} _) = do
@@ -795,16 +795,16 @@ instance HasMessage (Ptr mut) mut where
     message (PtrCap p)    = message p
     message (PtrList p)   = message p
 
-instance HasMessage (RawAnyList mut) mut where
-    message (RawAnyList'Struct l) = message l
-    message (RawAnyList'Normal l) = message l
+instance HasMessage (AnyList mut) mut where
+    message (AnyList'Struct l) = message l
+    message (AnyList'Normal l) = message l
 
-instance HasMessage (RawAnyNormalList mut) mut where
-    message (RawAnyNormalList'Ptr l)  = message l
-    message (RawAnyNormalList'Data l) = message l
+instance HasMessage (AnyNormalList mut) mut where
+    message (AnyNormalList'Ptr l)  = message l
+    message (AnyNormalList'Data l) = message l
 
-instance HasMessage (RawAnyDataList mut) mut where
-    message (RawAnyDataList _ l) = message l
+instance HasMessage (AnyDataList mut) mut where
+    message (AnyDataList _ l) = message l
 
 instance HasMessage (Cap mut) mut where
     message Cap{msg} = msg
@@ -851,9 +851,9 @@ copyPtr dest (Just (PtrStruct src)) = Just . PtrStruct <$> do
     copyStruct destStruct src
     pure destStruct
 
-copyList :: RWCtx m s => M.Message ('Mut s) -> RawAnyList ('Mut s) -> m (RawAnyList ('Mut s))
+copyList :: RWCtx m s => M.Message ('Mut s) -> AnyList ('Mut s) -> m (AnyList ('Mut s))
 copyList dest src = case src of
-    RawAnyList'Struct src -> RawAnyList'Struct <$> do
+    AnyList'Struct src -> AnyList'Struct <$> do
         destList <- allocCompositeList
             dest
             (fromIntegral $ structListWordCount src)
@@ -861,23 +861,23 @@ copyList dest src = case src of
             (length @'R.ListComposite src)
         copyListOf @'R.ListComposite destList src
         pure destList
-    RawAnyList'Normal src -> RawAnyList'Normal <$> case src of
-        RawAnyNormalList'Data src ->
-            RawAnyNormalList'Data <$> case src of
-                RawAnyDataList D0 src ->
-                    RawAnyDataList D0 <$> allocList0 dest (length @(DL 'R.Sz0) src)
-                RawAnyDataList D1 src ->
-                    RawAnyDataList D1 <$> allocList1 dest (length @(DL 'R.Sz1) src)
-                RawAnyDataList D8 src ->
-                    RawAnyDataList D8 <$> allocList8 dest (length @(DL 'R.Sz8) src)
-                RawAnyDataList D16 src ->
-                    RawAnyDataList D16 <$> allocList16 dest (length @(DL 'R.Sz16) src)
-                RawAnyDataList D32 src ->
-                    RawAnyDataList D32 <$> allocList32 dest (length @(DL 'R.Sz32) src)
-                RawAnyDataList D64 src ->
-                    RawAnyDataList D64 <$> allocList64 dest (length @(DL 'R.Sz64) src)
-        RawAnyNormalList'Ptr src ->
-            RawAnyNormalList'Ptr <$> copyNewListOf @('R.ListNormal 'R.ListPtr) dest src allocListPtr
+    AnyList'Normal src -> AnyList'Normal <$> case src of
+        AnyNormalList'Data src ->
+            AnyNormalList'Data <$> case src of
+                AnyDataList D0 src ->
+                    AnyDataList D0 <$> allocList0 dest (length @(DL 'R.Sz0) src)
+                AnyDataList D1 src ->
+                    AnyDataList D1 <$> allocList1 dest (length @(DL 'R.Sz1) src)
+                AnyDataList D8 src ->
+                    AnyDataList D8 <$> allocList8 dest (length @(DL 'R.Sz8) src)
+                AnyDataList D16 src ->
+                    AnyDataList D16 <$> allocList16 dest (length @(DL 'R.Sz16) src)
+                AnyDataList D32 src ->
+                    AnyDataList D32 <$> allocList32 dest (length @(DL 'R.Sz32) src)
+                AnyDataList D64 src ->
+                    AnyDataList D64 <$> allocList64 dest (length @(DL 'R.Sz64) src)
+        AnyNormalList'Ptr src ->
+            AnyNormalList'Ptr <$> copyNewListOf @('R.ListNormal 'R.ListPtr) dest src allocListPtr
 
 type DL r = 'R.ListNormal ('R.ListData r)
 
