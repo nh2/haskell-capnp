@@ -38,12 +38,12 @@ module Capnp.UntypedNew
     , get, index, length
     , setIndex
     , take
-    -- , rootPtr
+    , rootPtr
     -- , setRoot
     , rawBytes
     , ReadCtx
     , RWCtx
-    -- , HasMessage(..), MessageDefault(..)
+    , HasMessage(..), MessageDefault(..)
     , allocStruct
     , allocCompositeList
     , allocList0
@@ -253,7 +253,7 @@ data RawAnyDataList mut where
 
 data RawCapability mut = RawCapability
     { capIndex :: Word32
-    , message  :: Message mut
+    , msg      :: Message mut
     }
 
 ---
@@ -312,8 +312,8 @@ structListPtrCount :: RawStructList mut -> Word16
 structListPtrCount RawStructList{tag} = structPtrCount tag
 
 getClient :: ReadCtx m mut => RawCapability mut -> m M.Client
-getClient RawCapability{message, capIndex} =
-    M.getCap message (fromIntegral capIndex)
+getClient RawCapability{msg, capIndex} =
+    M.getCap msg (fromIntegral capIndex)
 
 -- | @get ptr@ returns the pointer stored at @ptr@.
 -- Deducts 1 from the quota for each word read (which may be multiple in the
@@ -326,7 +326,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
         Just p -> case p of
             P.CapPtr cap -> return $ Just $
                 RawAnyPointer'Capability RawCapability
-                    { message = pMessage
+                    { msg = pMessage
                     , capIndex = cap
                     }
             P.StructPtr off dataSz ptrSz -> return $ Just $
@@ -380,7 +380,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                                     Just (P.CapPtr cap) ->
                                         return $ Just $
                                             RawAnyPointer'Capability $ RawCapability
-                                                { message = pMessage
+                                                { msg = pMessage
                                                 , capIndex = cap
                                                 }
                                     ptr -> throwM $ E.InvalidDataError $
@@ -693,9 +693,8 @@ allocNormalList bitsPerElt msg len = do
 appendCap :: M.WriteCtx m s => M.Message ('Mut s) -> M.Client -> m (RawCapability ('Mut s))
 appendCap msg client = do
     i <- M.appendCap msg client
-    pure RawCapability { message = msg, capIndex = fromIntegral i }
+    pure RawCapability { msg, capIndex = fromIntegral i }
 
-{-
 -- | Returns the root pointer of a message.
 rootPtr :: ReadCtx m mut => M.Message mut -> m (RawStruct mut)
 rootPtr msg = do
@@ -710,4 +709,70 @@ rootPtr msg = do
         Nothing -> messageDefault msg
         _ -> throwM $ E.SchemaViolationError
                 "Unexpected root type; expected struct."
--}
+
+--------------------------------------------------------------------
+
+-- | Types @a@ whose storage is owned by a message..
+class HasMessage a mut | a -> mut where
+    -- | Get the message in which the @a@ is stored.
+    message :: a -> M.Message mut
+
+-- | Types which have a "default" value, but require a message
+-- to construct it.
+--
+-- The default is usually conceptually zero-size. This is mostly useful
+-- for generated code, so that it can use standard decoding techniques
+-- on default values.
+class HasMessage a mut => MessageDefault a mut where
+    messageDefault :: ReadCtx m mut => M.Message mut -> m a
+
+instance HasMessage (WordPtr mut) mut where
+    message M.WordPtr{pMessage} = pMessage
+
+instance HasMessage (RawStructList mut) mut where
+    message RawStructList{tag} = message tag
+
+instance HasMessage (RawStruct mut) mut where
+    message RawStruct{location} = message location
+
+instance HasMessage (RawNormalList mut r) mut where
+    message RawNormalList{location} = message location
+
+instance HasMessage (RawAnyPointer mut) mut where
+    message (RawAnyPointer'Struct p)     = message p
+    message (RawAnyPointer'Capability p) = message p
+    message (RawAnyPointer'List p)       = message p
+
+instance HasMessage (RawAnyList mut) mut where
+    message (RawAnyList'Struct l) = message l
+    message (RawAnyList'Normal l) = message l
+
+instance HasMessage (RawAnyNormalList mut) mut where
+    message (RawAnyNormalList'Ptr l)  = message l
+    message (RawAnyNormalList'Data l) = message l
+
+instance HasMessage (RawAnyDataList mut) mut where
+    message (RawAnyDataList _ l) = message l
+
+instance HasMessage (RawCapability mut) mut where
+    message RawCapability{msg} = msg
+
+instance MessageDefault (M.WordPtr mut) mut where
+    messageDefault msg = do
+        pSegment <- M.getSegment msg 0
+        pure M.WordPtr{pMessage = msg, pSegment, pAddr = WordAt 0 0}
+
+instance MessageDefault (RawStructList mut) mut where
+    messageDefault msg = do
+        tag <- messageDefault msg
+        pure RawStructList {tag, len = 0}
+
+instance MessageDefault (RawStruct mut) mut where
+    messageDefault msg = do
+        location <- messageDefault msg
+        pure $ RawStruct location 0 0
+
+instance MessageDefault (RawNormalList mut r) mut where
+    messageDefault msg = do
+        location <- messageDefault msg
+        pure RawNormalList{location, len = 0}
