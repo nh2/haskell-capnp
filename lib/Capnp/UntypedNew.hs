@@ -31,6 +31,8 @@ module Capnp.UntypedNew
     , FieldLoc(..)
     , DataFieldLoc(..)
 
+    , Ptr(..), List, Struct, Cap
+
     , getData, getPtr
     , setData, setPtr
     , structByteCount
@@ -171,7 +173,7 @@ type family RawData (sz :: R.DataSz) :: Type where
     RawData 'R.Sz64 = Word64
 
 type family RawPtr (mut :: Mutability) (r :: Maybe R.PtrRepr) :: Type where
-    RawPtr mut 'Nothing = Maybe (RawAnyPointer mut)
+    RawPtr mut 'Nothing = Maybe (Ptr mut)
     RawPtr mut ('Just r) = RawSomePtr mut r
 
 
@@ -204,10 +206,10 @@ data NormalList mut (r :: R.NormalListRepr) = NormalList
     , len      :: Int
     }
 
-data RawAnyPointer mut
-    = RawAnyPointer'Struct (RawSomePtr mut 'R.Struct)
-    | RawAnyPointer'Cap (RawSomePtr mut 'R.Cap)
-    | RawAnyPointer'List (RawSomePtr mut ('R.List 'Nothing))
+data Ptr mut
+    = PtrStruct (RawSomePtr mut 'R.Struct)
+    | PtrCap (RawSomePtr mut 'R.Cap)
+    | PtrList (RawSomePtr mut ('R.List 'Nothing))
 
 data RawAnyList mut
     = RawAnyList'Struct (RawSomeList mut 'R.ListComposite)
@@ -259,19 +261,19 @@ getClient Cap{msg, capIndex} =
 -- | @get ptr@ returns the pointer stored at @ptr@.
 -- Deducts 1 from the quota for each word read (which may be multiple in the
 -- case of far pointers).
-get :: forall mut m. ReadCtx m mut => M.WordPtr mut -> m (Maybe (RawAnyPointer mut))
+get :: forall mut m. ReadCtx m mut => M.WordPtr mut -> m (Maybe (Ptr mut))
 get ptr@M.WordPtr{pMessage, pAddr} = do
     word <- getWord ptr
     case P.parsePtr word of
         Nothing -> return Nothing
         Just p -> case p of
             P.CapPtr cap -> return $ Just $
-                RawAnyPointer'Cap Cap
+                PtrCap Cap
                     { msg = pMessage
                     , capIndex = cap
                     }
             P.StructPtr off dataSz ptrSz -> return $ Just $
-                RawAnyPointer'Struct $ Struct
+                PtrStruct $ Struct
                     ptr { M.pAddr = resolveOffset pAddr off } dataSz ptrSz
             P.ListPtr off eltSpec -> Just <$>
                 getList ptr { M.pAddr = resolveOffset pAddr off } eltSpec
@@ -309,7 +311,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                                 case P.parsePtr tagWord of
                                     Just (P.StructPtr 0 dataSz ptrSz) ->
                                         return $ Just $
-                                            RawAnyPointer'Struct $
+                                            PtrStruct $
                                                 Struct finalPtr dataSz ptrSz
                                     Just (P.ListPtr 0 eltSpec) ->
                                         Just <$> getList finalPtr eltSpec
@@ -320,7 +322,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
                                     -- that, and submit a patch to the spec.
                                     Just (P.CapPtr cap) ->
                                         return $ Just $
-                                            RawAnyPointer'Cap $ Cap
+                                            PtrCap $ Cap
                                                 { msg = pMessage
                                                 , capIndex = cap
                                                 }
@@ -340,7 +342,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
         invoice 1 *> M.read pSegment wordIndex
     resolveOffset addr@WordAt{..} off =
         addr { wordIndex = wordIndex + fromIntegral off + 1 }
-    getList ptr@M.WordPtr{pAddr=addr@WordAt{wordIndex}} eltSpec = RawAnyPointer'List <$>
+    getList ptr@M.WordPtr{pAddr=addr@WordAt{wordIndex}} eltSpec = PtrList <$>
         case eltSpec of
             P.EltNormal sz len -> pure $ case sz of
                 P.Sz0   -> RawAnyList'Normal $ RawAnyNormalList'Data $ RawAnyDataList D0 nlist
@@ -442,16 +444,16 @@ instance List ('R.ListNormal 'R.ListPtr) where
             basicUnsafeSetIndex @('R.ListNormal 'R.ListPtr) newPtr i list
         Nothing ->
             basicUnsafeSetIndexNList 64 (P.serializePtr Nothing) i list
-        Just (RawAnyPointer'Cap Cap{capIndex}) ->
+        Just (PtrCap Cap{capIndex}) ->
             basicUnsafeSetIndexNList 64 (P.serializePtr (Just (P.CapPtr capIndex))) i list
-        Just p@(RawAnyPointer'List ptrList) ->
+        Just p@(PtrList ptrList) ->
             setPtrIndex list p $ P.ListPtr 0 (listEltSpec ptrList)
-        Just p@(RawAnyPointer'Struct (Struct _ dataSz ptrSz)) ->
+        Just p@(PtrStruct (Struct _ dataSz ptrSz)) ->
             setPtrIndex list p $ P.StructPtr 0 dataSz ptrSz
       where
         setPtrIndex
             :: (ReadCtx m ('Mut s), M.WriteCtx m s)
-            => NormalList ('Mut s) r -> RawAnyPointer ('Mut s) -> P.Ptr -> m ()
+            => NormalList ('Mut s) r -> Ptr ('Mut s) -> P.Ptr -> m ()
         setPtrIndex NormalList{location=nPtr@M.WordPtr{pAddr=addr@WordAt{wordIndex}}} absPtr relPtr =
             let srcPtr = nPtr { M.pAddr = addr { wordIndex = wordIndex + WordCount i } }
             in setPointerTo srcPtr (ptrAddr absPtr) relPtr
@@ -477,10 +479,10 @@ instance List ('R.ListNormal 'R.ListPtr) where
 
 -- | Return the address of the pointer's target. It is illegal to call this on
 -- a pointer which targets a capability.
-ptrAddr :: RawAnyPointer mut -> WordAddr
-ptrAddr (RawAnyPointer'Cap _) = error "ptrAddr called on a capability pointer."
-ptrAddr (RawAnyPointer'Struct (Struct M.WordPtr{pAddr}_ _)) = pAddr
-ptrAddr (RawAnyPointer'List list) = listAddr list
+ptrAddr :: Ptr mut -> WordAddr
+ptrAddr (PtrCap _) = error "ptrAddr called on a capability pointer."
+ptrAddr (PtrStruct (Struct M.WordPtr{pAddr}_ _)) = pAddr
+ptrAddr (PtrList list) = listAddr list
 
 -- | Return the starting address of the list.
 listAddr :: RawAnyList mut -> WordAddr
@@ -559,7 +561,7 @@ getData i struct
 
 -- | @'getPtr' i struct@ gets the @i@th word from the struct's pointer section,
 -- returning Nothing if it is absent.
-getPtr :: ReadCtx m mut => Int -> Struct mut -> m (Maybe (RawAnyPointer mut))
+getPtr :: ReadCtx m mut => Int -> Struct mut -> m (Maybe (Ptr mut))
 getPtr i struct
     | fromIntegral (structPtrCount struct) <= i = Nothing <$ invoice 1
     | otherwise = index @('R.ListNormal 'R.ListPtr) i (ptrSection struct)
@@ -572,7 +574,7 @@ setData value i = setIndex @('R.ListNormal ('R.ListData 'R.Sz64)) value i . data
 
 -- | @'setData' value i struct@ sets the @i@th pointer in the struct's pointer
 -- section to @value@.
-setPtr :: (ReadCtx m ('Mut s), M.WriteCtx m s) => Maybe (RawAnyPointer ('Mut s)) -> Int -> Struct ('Mut s) -> m ()
+setPtr :: (ReadCtx m ('Mut s), M.WriteCtx m s) => Maybe (Ptr ('Mut s)) -> Int -> Struct ('Mut s) -> m ()
 setPtr value i = setIndex @('R.ListNormal 'R.ListPtr) value i . ptrSection
 
 -- | 'rawBytes' returns the raw bytes corresponding to the list.
@@ -672,7 +674,7 @@ rootPtr msg = do
         , pAddr = WordAt 0 0
         }
     case root of
-        Just (RawAnyPointer'Struct struct) -> pure struct
+        Just (PtrStruct struct) -> pure struct
         Nothing -> messageDefault msg
         _ -> throwM $ E.SchemaViolationError
                 "Unexpected root type; expected struct."
@@ -788,10 +790,10 @@ instance HasMessage (Struct mut) mut where
 instance HasMessage (NormalList mut r) mut where
     message NormalList{location} = message location
 
-instance HasMessage (RawAnyPointer mut) mut where
-    message (RawAnyPointer'Struct p) = message p
-    message (RawAnyPointer'Cap p)    = message p
-    message (RawAnyPointer'List p)   = message p
+instance HasMessage (Ptr mut) mut where
+    message (PtrStruct p) = message p
+    message (PtrCap p)    = message p
+    message (PtrList p)   = message p
 
 instance HasMessage (RawAnyList mut) mut where
     message (RawAnyList'Struct l) = message l
@@ -835,13 +837,13 @@ instance MessageDefault (NormalList mut r) mut where
 copyCap :: RWCtx m s => M.Message ('Mut s) -> Cap ('Mut s) -> m (Cap ('Mut s))
 copyCap dest cap = getClient cap >>= appendCap dest
 
-copyPtr :: RWCtx m s => M.Message ('Mut s) -> Maybe (RawAnyPointer ('Mut s)) -> m (Maybe (RawAnyPointer ('Mut s)))
+copyPtr :: RWCtx m s => M.Message ('Mut s) -> Maybe (Ptr ('Mut s)) -> m (Maybe (Ptr ('Mut s)))
 copyPtr _ Nothing                = pure Nothing
-copyPtr dest (Just (RawAnyPointer'Cap cap)) =
-    Just . RawAnyPointer'Cap <$> copyCap dest cap
-copyPtr dest (Just (RawAnyPointer'List src)) =
-    Just . RawAnyPointer'List <$> copyList dest src
-copyPtr dest (Just (RawAnyPointer'Struct src)) = Just . RawAnyPointer'Struct <$> do
+copyPtr dest (Just (PtrCap cap)) =
+    Just . PtrCap <$> copyCap dest cap
+copyPtr dest (Just (PtrList src)) =
+    Just . PtrList <$> copyList dest src
+copyPtr dest (Just (PtrStruct src)) = Just . PtrStruct <$> do
     destStruct <- allocStruct
             dest
             (fromIntegral $ structWordCount src)
@@ -914,7 +916,7 @@ copyStruct dest src = do
     copySection @('R.ListNormal 'R.ListPtr)
         (ptrSection  dest)
         (ptrSection  src)
-        (Nothing @(RawAnyPointer ('Mut s)))
+        (Nothing @(Ptr ('Mut s)))
   where
     copySection
         :: forall r. List r
