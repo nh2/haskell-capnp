@@ -26,13 +26,7 @@ Each of the data types exported by this module is parametrized over the message'
 mutability (see "Capnp.Message").
 -}
 module Capnp.UntypedNew
-    ( HasRepr
-    , Repr(..)
-    , PtrRepr(..)
-    , ListRepr(..)
-    , DataSz(..)
-
-    , HasField
+    ( HasField
     , Field(..)
     , FieldLoc(..)
     , DataFieldLoc(..)
@@ -72,7 +66,6 @@ module Capnp.UntypedNew
 import Prelude hiding (length, take)
 
 import Data.Bits
-import Data.Int
 import Data.Word
 
 import qualified Data.ByteString as BS
@@ -99,6 +92,7 @@ import qualified Capnp.Errors         as E
 import           Capnp.Message        (Message, Mutability (..), WordPtr)
 import qualified Capnp.Message        as M
 import qualified Capnp.Pointer        as P
+import           Capnp.Repr
 import           Capnp.TraversalLimit (MonadLimit(invoice))
 import           Internal.BoundsCheck (checkIndex)
 
@@ -112,31 +106,6 @@ type RWCtx m s = (ReadCtx m ('Mut s), M.WriteCtx m s)
 -------------------------------------------------------------------------------
 -- Representations
 -------------------------------------------------------------------------------
-
--- | A 'Repr' describes a wire representation for a value. This is
--- mostly used at the type level (using DataKinds); types are
--- parametrized over representations.
-data Repr
-    = Ptr (Maybe PtrRepr)
-    -- ^ Pointer type
-    | Data DataSz
-    -- ^ Non-pointer type.
-
-data PtrRepr
-    = Capability
-    | List (Maybe ListRepr)
-    | Struct
-
-data ListRepr where
-    ListNormal :: NormalListRepr -> ListRepr
-    ListComposite :: ListRepr
-
-data NormalListRepr where
-    ListData :: DataSz -> NormalListRepr
-    ListPtr :: NormalListRepr
-
--- | The size of a non-pointer type.
-data DataSz = Sz0 | Sz1 | Sz8 | Sz16 | Sz32 | Sz64
 
 data DataSzTag (sz :: DataSz) where
     D0 :: DataSzTag 'Sz0
@@ -171,8 +140,6 @@ data DataFieldLoc (sz :: DataSz) = DataFieldLoc
     , size         :: Proxy sz
     , defaultValue :: Word64
     }
-
-class HasRepr a (r :: Repr) | a -> r
 
 data Field a b where
     Field :: HasRepr b r => FieldLoc r -> Field a b
@@ -259,19 +226,6 @@ data RawCapability mut = RawCapability
     }
 
 ---
-
-instance HasRepr () ('Data 'Sz0)
-instance HasRepr Bool ('Data 'Sz1)
-instance HasRepr Word8 ('Data 'Sz8)
-instance HasRepr Word16 ('Data 'Sz16)
-instance HasRepr Word32 ('Data 'Sz32)
-instance HasRepr Word64 ('Data 'Sz64)
-instance HasRepr Int8 ('Data 'Sz8)
-instance HasRepr Int16 ('Data 'Sz16)
-instance HasRepr Int32 ('Data 'Sz32)
-instance HasRepr Int64 ('Data 'Sz64)
-instance HasRepr Float ('Data 'Sz32)
-instance HasRepr Double ('Data 'Sz64)
 
 
 -- | @ElemRepr r@ is the representation of elements of lists with
