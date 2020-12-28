@@ -228,20 +228,6 @@ data RawCapability mut = RawCapability
 ---
 
 
--- | @ElemRepr r@ is the representation of elements of lists with
--- representation @r@.
-type family ElemRepr (rl :: R.ListRepr) :: R.Repr where
-    ElemRepr 'R.ListComposite = 'R.Ptr ('Just 'R.Struct)
-    ElemRepr ('R.ListNormal 'R.ListPtr) = 'R.Ptr 'Nothing
-    ElemRepr ('R.ListNormal ('R.ListData sz)) = 'R.Data sz
-
--- | @ListReprFor e@ is the representation of lists with elements
--- whose representation is @e@.
-type family ListReprFor (e :: R.Repr) :: R.ListRepr where
-    ListReprFor ('R.Data sz) = 'R.ListNormal ('R.ListData sz)
-    ListReprFor ('R.Ptr ('Just 'R.Struct)) = 'R.ListComposite
-    ListReprFor ('R.Ptr a) = 'R.ListNormal 'R.ListPtr
-
 -- | Get the size (in words) of a struct's data section.
 structWordCount :: RawStruct mut -> WordCount
 structWordCount RawStruct{nWords} = fromIntegral nWords
@@ -395,11 +381,11 @@ class List (r :: R.ListRepr) where
     -- limits. Call 'index' instead of calling this directly.
     basicUnsafeIndex
         :: forall mut m. (ReadCtx m mut)
-        => Int -> RawSomeList mut r -> m (Raw mut (ElemRepr r))
+        => Int -> RawSomeList mut r -> m (Raw mut (R.ElemRepr r))
 
     basicUnsafeSetIndex
         :: forall m s. (RWCtx m s)
-        => Raw ('Mut s) (ElemRepr r) -> Int -> RawSomeList ('Mut s) r -> m ()
+        => Raw ('Mut s) (R.ElemRepr r) -> Int -> RawSomeList ('Mut s) r -> m ()
 
     basicUnsafeTake :: Int -> RawSomeList mut r -> RawSomeList mut r
 
@@ -409,7 +395,7 @@ normalListLength RawNormalList{len} = len
 -- | @index i list@ returns the ith element in @list@. Deducts 1 from the quota
 index
     :: forall r mut m. (ReadCtx m mut, List r)
-    => Int -> RawList mut ('Just r) -> m (Raw mut (ElemRepr r))
+    => Int -> RawList mut ('Just r) -> m (Raw mut (R.ElemRepr r))
 index i list = do
     invoice 1
     checkIndex i (length @r @mut list)
@@ -418,7 +404,7 @@ index i list = do
 -- | @'setIndex value i list@ sets the @i@th element of @list@ to @value@.
 setIndex
     :: forall r m s. (List r, RWCtx m s)
-    => Raw ('Mut s) (ElemRepr r) -> Int -> RawSomeList ('Mut s) r -> m ()
+    => Raw ('Mut s) (R.ElemRepr r) -> Int -> RawSomeList ('Mut s) r -> m ()
 setIndex value i list = do
     checkIndex i (length @r @('Mut s) list)
     basicUnsafeSetIndex @r value i list
@@ -592,7 +578,7 @@ setPtr value i = setIndex @('R.ListNormal 'R.ListPtr) value i . ptrSection
 -- | 'rawBytes' returns the raw bytes corresponding to the list.
 rawBytes
     :: ReadCtx m 'Const
-    => RawSomeList 'Const (ListReprFor ('R.Data 'R.Sz8)) -> m BS.ByteString
+    => RawSomeList 'Const (R.ListReprFor ('R.Data 'R.Sz8)) -> m BS.ByteString
 -- TODO: we can get away with a more lax context than ReadCtx, maybe even make
 -- this non-monadic.
 rawBytes (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{wordIndex}} len) = do
@@ -934,7 +920,7 @@ copyStruct dest src = do
         :: forall r. List r
         => RawSomeList ('Mut s) r
         -> RawSomeList ('Mut s) r
-        -> Raw ('Mut s) (ElemRepr r)
+        -> Raw ('Mut s) (R.ElemRepr r)
         -> m ()
     copySection dest src pad = do
         -- Copy the source section to the destination section:
