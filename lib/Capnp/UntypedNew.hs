@@ -92,7 +92,7 @@ import qualified Capnp.Errors         as E
 import           Capnp.Message        (Message, Mutability (..), WordPtr)
 import qualified Capnp.Message        as M
 import qualified Capnp.Pointer        as P
-import           Capnp.Repr
+import qualified Capnp.Repr           as R
 import           Capnp.TraversalLimit (MonadLimit(invoice))
 import           Internal.BoundsCheck (checkIndex)
 
@@ -107,45 +107,45 @@ type RWCtx m s = (ReadCtx m ('Mut s), M.WriteCtx m s)
 -- Representations
 -------------------------------------------------------------------------------
 
-data DataSzTag (sz :: DataSz) where
-    D0 :: DataSzTag 'Sz0
-    D1 :: DataSzTag 'Sz1
-    D8 :: DataSzTag 'Sz8
-    D16 :: DataSzTag 'Sz16
-    D32 :: DataSzTag 'Sz32
-    D64 :: DataSzTag 'Sz64
+data DataSzTag (sz :: R.DataSz) where
+    D0 :: DataSzTag 'R.Sz0
+    D1 :: DataSzTag 'R.Sz1
+    D8 :: DataSzTag 'R.Sz8
+    D16 :: DataSzTag 'R.Sz16
+    D32 :: DataSzTag 'R.Sz32
+    D64 :: DataSzTag 'R.Sz64
 
-class DataSizeBits (sz :: DataSz) where
+class DataSizeBits (sz :: R.DataSz) where
     szBits :: BitCount
 
-instance DataSizeBits 'Sz0 where szBits = 0
-instance DataSizeBits 'Sz1 where szBits = 1
-instance DataSizeBits 'Sz8 where szBits = 8
-instance DataSizeBits 'Sz16 where szBits = 16
-instance DataSizeBits 'Sz32 where szBits = 32
-instance DataSizeBits 'Sz64 where szBits = 64
+instance DataSizeBits 'R.Sz0 where szBits = 0
+instance DataSizeBits 'R.Sz1 where szBits = 1
+instance DataSizeBits 'R.Sz8 where szBits = 8
+instance DataSizeBits 'R.Sz16 where szBits = 16
+instance DataSizeBits 'R.Sz32 where szBits = 32
+instance DataSizeBits 'R.Sz64 where szBits = 64
 
 -------------------------------------------------------------------------------
 -- Fields. TODO: this probably belongs elsewhere.
 -------------------------------------------------------------------------------
 
-data FieldLoc (r :: Repr) where
-    GroupField :: FieldLoc ('Ptr ('Just 'Struct))
-    UnionField :: Word16 -> FieldLoc ('Ptr ('Just 'Struct))
-    PtrField :: Word16 -> FieldLoc ('Ptr a)
-    DataField :: DataFieldLoc a -> FieldLoc ('Data a)
+data FieldLoc (r :: R.Repr) where
+    GroupField :: FieldLoc ('R.Ptr ('Just 'R.Struct))
+    UnionField :: Word16 -> FieldLoc ('R.Ptr ('Just 'R.Struct))
+    PtrField :: Word16 -> FieldLoc ('R.Ptr a)
+    DataField :: DataFieldLoc a -> FieldLoc ('R.Data a)
 
-data DataFieldLoc (sz :: DataSz) = DataFieldLoc
+data DataFieldLoc (sz :: R.DataSz) = DataFieldLoc
     { offset       :: Int
     , size         :: Proxy sz
     , defaultValue :: Word64
     }
 
 data Field a b where
-    Field :: HasRepr b r => FieldLoc r -> Field a b
+    Field :: R.HasRepr b r => FieldLoc r -> Field a b
 
 class
-    ( HasRepr a ('Ptr ('Just 'Struct))
+    ( R.HasRepr a ('R.Ptr ('Just 'R.Struct))
     , IsLabel name (Field a b)
     ) => HasField name a b | a name -> b
 
@@ -158,35 +158,35 @@ class
 
 -- | @Raw mut r@ is a value with representation @r@ stored in a message with
 -- mutability @mut@.
-type family Raw (mut :: Mutability) (r :: Repr) :: Type where
-    Raw mut ('Data sz) = RawData sz
-    Raw mut ('Ptr ptr) = RawPtr mut ptr
+type family Raw (mut :: Mutability) (r :: R.Repr) :: Type where
+    Raw mut ('R.Data sz) = RawData sz
+    Raw mut ('R.Ptr ptr) = RawPtr mut ptr
 
-type family RawData (sz :: DataSz) :: Type where
-    RawData 'Sz0 = ()
-    RawData 'Sz1 = Bool
-    RawData 'Sz8 = Word8
-    RawData 'Sz16 = Word16
-    RawData 'Sz32 = Word32
-    RawData 'Sz64 = Word64
+type family RawData (sz :: R.DataSz) :: Type where
+    RawData 'R.Sz0 = ()
+    RawData 'R.Sz1 = Bool
+    RawData 'R.Sz8 = Word8
+    RawData 'R.Sz16 = Word16
+    RawData 'R.Sz32 = Word32
+    RawData 'R.Sz64 = Word64
 
-type family RawPtr (mut :: Mutability) (r :: Maybe PtrRepr) :: Type where
+type family RawPtr (mut :: Mutability) (r :: Maybe R.PtrRepr) :: Type where
     RawPtr mut 'Nothing = Maybe (RawAnyPointer mut)
     RawPtr mut ('Just r) = RawSomePtr mut r
 
 
-type family RawSomePtr (mut :: Mutability) (r :: PtrRepr) :: Type where
-    RawSomePtr mut 'Struct = RawStruct mut
-    RawSomePtr mut 'Capability = RawCapability mut
-    RawSomePtr mut ('List r) = RawList mut r
+type family RawSomePtr (mut :: Mutability) (r :: R.PtrRepr) :: Type where
+    RawSomePtr mut 'R.Struct = RawStruct mut
+    RawSomePtr mut 'R.Capability = RawCapability mut
+    RawSomePtr mut ('R.List r) = RawList mut r
 
-type family RawList (mut :: Mutability) (r :: Maybe ListRepr) :: Type where
+type family RawList (mut :: Mutability) (r :: Maybe R.ListRepr) :: Type where
     RawList mut 'Nothing = RawAnyList mut
     RawList mut ('Just r) = RawSomeList mut r
 
-type family RawSomeList (mut :: Mutability) (r :: ListRepr) :: Type where
-    RawSomeList mut ('ListNormal r) = RawNormalList mut r
-    RawSomeList mut 'ListComposite = RawStructList mut
+type family RawSomeList (mut :: Mutability) (r :: R.ListRepr) :: Type where
+    RawSomeList mut ('R.ListNormal r) = RawNormalList mut r
+    RawSomeList mut 'R.ListComposite = RawStructList mut
 
 data RawStructList mut = RawStructList
     { len :: Int
@@ -199,26 +199,26 @@ data RawStruct mut = RawStruct
     , nPtrs    :: Word16
     }
 
-data RawNormalList mut (r :: NormalListRepr) = RawNormalList
+data RawNormalList mut (r :: R.NormalListRepr) = RawNormalList
     { location :: WordPtr mut
     , len      :: Int
     }
 
 data RawAnyPointer mut
-    = RawAnyPointer'Struct (RawSomePtr mut 'Struct)
-    | RawAnyPointer'Capability (RawSomePtr mut 'Capability)
-    | RawAnyPointer'List (RawSomePtr mut ('List 'Nothing))
+    = RawAnyPointer'Struct (RawSomePtr mut 'R.Struct)
+    | RawAnyPointer'Capability (RawSomePtr mut 'R.Capability)
+    | RawAnyPointer'List (RawSomePtr mut ('R.List 'Nothing))
 
 data RawAnyList mut
-    = RawAnyList'Struct (RawSomeList mut 'ListComposite)
+    = RawAnyList'Struct (RawSomeList mut 'R.ListComposite)
     | RawAnyList'Normal (RawAnyNormalList mut)
 
 data RawAnyNormalList mut
-    = RawAnyNormalList'Ptr (RawNormalList mut 'ListPtr)
+    = RawAnyNormalList'Ptr (RawNormalList mut 'R.ListPtr)
     | RawAnyNormalList'Data (RawAnyDataList mut)
 
 data RawAnyDataList mut where
-    RawAnyDataList :: DataSzTag sz -> RawNormalList mut ('ListData sz) -> RawAnyDataList mut
+    RawAnyDataList :: DataSzTag sz -> RawNormalList mut ('R.ListData sz) -> RawAnyDataList mut
 
 data RawCapability mut = RawCapability
     { capIndex :: Word32
@@ -230,17 +230,17 @@ data RawCapability mut = RawCapability
 
 -- | @ElemRepr r@ is the representation of elements of lists with
 -- representation @r@.
-type family ElemRepr (rl :: ListRepr) :: Repr where
-    ElemRepr 'ListComposite = 'Ptr ('Just 'Struct)
-    ElemRepr ('ListNormal 'ListPtr) = 'Ptr 'Nothing
-    ElemRepr ('ListNormal ('ListData sz)) = 'Data sz
+type family ElemRepr (rl :: R.ListRepr) :: R.Repr where
+    ElemRepr 'R.ListComposite = 'R.Ptr ('Just 'R.Struct)
+    ElemRepr ('R.ListNormal 'R.ListPtr) = 'R.Ptr 'Nothing
+    ElemRepr ('R.ListNormal ('R.ListData sz)) = 'R.Data sz
 
 -- | @ListReprFor e@ is the representation of lists with elements
 -- whose representation is @e@.
-type family ListReprFor (e :: Repr) :: ListRepr where
-    ListReprFor ('Data sz) = 'ListNormal ('ListData sz)
-    ListReprFor ('Ptr ('Just 'Struct)) = 'ListComposite
-    ListReprFor ('Ptr a) = 'ListNormal 'ListPtr
+type family ListReprFor (e :: R.Repr) :: R.ListRepr where
+    ListReprFor ('R.Data sz) = 'R.ListNormal ('R.ListData sz)
+    ListReprFor ('R.Ptr ('Just 'R.Struct)) = 'R.ListComposite
+    ListReprFor ('R.Ptr a) = 'R.ListNormal 'R.ListPtr
 
 -- | Get the size (in words) of a struct's data section.
 structWordCount :: RawStruct mut -> WordCount
@@ -387,7 +387,7 @@ get ptr@M.WordPtr{pMessage, pAddr} = do
 -------------------------------------------------------------------------------
 
 -- | Operations common to all list types.
-class List (r :: ListRepr) where
+class List (r :: R.ListRepr) where
     -- | Returns the length of a list
     length :: RawList mut ('Just r) -> Int
 
@@ -430,7 +430,7 @@ take count list
         throwM E.BoundsError { E.index = count, E.maxIndex = length @r @mut list - 1 }
     | otherwise = pure $ basicUnsafeTake @r @mut count list
 
-instance List 'ListComposite where
+instance List 'R.ListComposite where
     length RawStructList{len} = len
     basicUnsafeIndex i RawStructList{tag = RawStruct ptr@M.WordPtr{pAddr=addr@WordAt{..}} dataSz ptrSz} = do
         let offset = WordCount $ i * (fromIntegral dataSz + fromIntegral ptrSz)
@@ -438,14 +438,14 @@ instance List 'ListComposite where
         return $ RawStruct ptr { M.pAddr = addr' } dataSz ptrSz
     basicUnsafeTake i RawStructList{tag} = RawStructList{tag, len = i}
     basicUnsafeSetIndex value i list = do
-        dest <- basicUnsafeIndex @'ListComposite i list
+        dest <- basicUnsafeIndex @'R.ListComposite i list
         copyStruct dest value
 
 
 basicUnsafeTakeNormal :: Int -> RawNormalList mut r -> RawNormalList mut r
 basicUnsafeTakeNormal i RawNormalList{location} = RawNormalList{location, len = i}
 
-instance List ('ListNormal 'ListPtr) where
+instance List ('R.ListNormal 'R.ListPtr) where
     length RawNormalList{len} = len
     basicUnsafeIndex i (RawNormalList ptr@M.WordPtr{pAddr=addr@WordAt{..}} _) =
         get ptr { M.pAddr = addr { wordIndex = wordIndex + WordCount i } }
@@ -453,7 +453,7 @@ instance List ('ListNormal 'ListPtr) where
     basicUnsafeSetIndex value i list = case value of
         Just p | message p /= message list -> do
             newPtr <- copyPtr (message list) value
-            basicUnsafeSetIndex @('ListNormal 'ListPtr) newPtr i list
+            basicUnsafeSetIndex @('R.ListNormal 'R.ListPtr) newPtr i list
         Nothing ->
             basicUnsafeSetIndexNList 64 (P.serializePtr Nothing) i list
         Just (RawAnyPointer'Capability RawCapability{capIndex}) ->
@@ -472,7 +472,7 @@ instance List ('ListNormal 'ListPtr) where
         listEltSpec = \case
             RawAnyList'Struct RawStructList{tag = RawStruct _ dataSz ptrSz} ->
                 P.EltComposite $ (*)
-                    (fromIntegral $ length @('ListNormal 'ListPtr) list)
+                    (fromIntegral $ length @('R.ListNormal 'R.ListPtr) list)
                     (fromIntegral dataSz + fromIntegral ptrSz)
             RawAnyList'Normal l ->
                 case l of
@@ -529,13 +529,13 @@ basicUnsafeSetIndexNList
         let shift = fromIntegral (i `mod` eltsPerWord) * nbits
         M.write pSegment eltWordIndex $ replaceBits value word (fromIntegral shift)
 
-instance {-# OVERLAPS #-} List ('ListNormal ('ListData 'Sz0)) where
+instance {-# OVERLAPS #-} List ('R.ListNormal ('R.ListData 'R.Sz0)) where
     length = normalListLength
     basicUnsafeIndex _ _ = pure ()
     basicUnsafeTake = basicUnsafeTakeNormal
     basicUnsafeSetIndex _ _ _ = pure ()
 
-instance {-# OVERLAPS #-} List ('ListNormal ('ListData 'Sz1)) where
+instance {-# OVERLAPS #-} List ('R.ListNormal ('R.ListData 'R.Sz1)) where
     length = normalListLength
     basicUnsafeIndex i list = do
         Word1 val <- basicUnsafeIndexNList 1 i list
@@ -544,7 +544,7 @@ instance {-# OVERLAPS #-} List ('ListNormal ('ListData 'Sz1)) where
     basicUnsafeSetIndex val = basicUnsafeSetIndexNList 1 (Word1 val)
 
 instance (DataSizeBits sz, Integral (RawData sz), Bounded (RawData sz))
-    => List ('ListNormal ('ListData sz))
+    => List ('R.ListNormal ('R.ListData sz))
   where
     length = normalListLength
     basicUnsafeIndex = basicUnsafeIndexNList (szBits @sz)
@@ -552,12 +552,12 @@ instance (DataSizeBits sz, Integral (RawData sz), Bounded (RawData sz))
     basicUnsafeSetIndex = basicUnsafeSetIndexNList (szBits @sz)
 
 -- | The data section of a struct, as a list of Word64
-dataSection :: RawStruct mut -> RawSomeList mut ('ListNormal ('ListData 'Sz64))
+dataSection :: RawStruct mut -> RawSomeList mut ('R.ListNormal ('R.ListData 'R.Sz64))
 dataSection RawStruct{location, nWords} =
     RawNormalList location (fromIntegral nWords)
 
 -- | The pointer section of a struct, as a list of Ptr
-ptrSection :: RawStruct mut -> RawSomeList mut ('ListNormal 'ListPtr)
+ptrSection :: RawStruct mut -> RawSomeList mut ('R.ListNormal 'R.ListPtr)
 ptrSection (RawStruct ptr@M.WordPtr{pAddr=addr@WordAt{wordIndex}} dataSz ptrSz) =
     RawNormalList
         { location = ptr { M.pAddr = addr { wordIndex = wordIndex + fromIntegral dataSz } }
@@ -569,30 +569,30 @@ ptrSection (RawStruct ptr@M.WordPtr{pAddr=addr@WordAt{wordIndex}} dataSz ptrSz) 
 getData :: ReadCtx m mut => Int -> RawStruct mut-> m Word64
 getData i struct
     | fromIntegral (structWordCount struct) <= i = 0 <$ invoice 1
-    | otherwise = index @('ListNormal ('ListData 'Sz64)) i (dataSection struct)
+    | otherwise = index @('R.ListNormal ('R.ListData 'R.Sz64)) i (dataSection struct)
 
 -- | @'getPtr' i struct@ gets the @i@th word from the struct's pointer section,
 -- returning Nothing if it is absent.
 getPtr :: ReadCtx m mut => Int -> RawStruct mut -> m (Maybe (RawAnyPointer mut))
 getPtr i struct
     | fromIntegral (structPtrCount struct) <= i = Nothing <$ invoice 1
-    | otherwise = index @('ListNormal 'ListPtr) i (ptrSection struct)
+    | otherwise = index @('R.ListNormal 'R.ListPtr) i (ptrSection struct)
 
 -- | @'setData' value i struct@ sets the @i@th word in the struct's data section
 -- to @value@.
 setData :: (ReadCtx m ('Mut s), M.WriteCtx m s)
     => Word64 -> Int -> RawStruct ('Mut s) -> m ()
-setData value i = setIndex @('ListNormal ('ListData 'Sz64)) value i . dataSection
+setData value i = setIndex @('R.ListNormal ('R.ListData 'R.Sz64)) value i . dataSection
 
 -- | @'setData' value i struct@ sets the @i@th pointer in the struct's pointer
 -- section to @value@.
 setPtr :: (ReadCtx m ('Mut s), M.WriteCtx m s) => Maybe (RawAnyPointer ('Mut s)) -> Int -> RawStruct ('Mut s) -> m ()
-setPtr value i = setIndex @('ListNormal 'ListPtr) value i . ptrSection
+setPtr value i = setIndex @('R.ListNormal 'R.ListPtr) value i . ptrSection
 
 -- | 'rawBytes' returns the raw bytes corresponding to the list.
 rawBytes
     :: ReadCtx m 'Const
-    => RawSomeList 'Const (ListReprFor ('Data 'Sz8)) -> m BS.ByteString
+    => RawSomeList 'Const (ListReprFor ('R.Data 'R.Sz8)) -> m BS.ByteString
 -- TODO: we can get away with a more lax context than ReadCtx, maybe even make
 -- this non-monadic.
 rawBytes (RawNormalList M.WordPtr{pSegment, pAddr=WordAt{wordIndex}} len) = do
@@ -628,25 +628,25 @@ allocCompositeList msg dataSz ptrSz len = do
     pure $ RawStructList { tag = firstStruct, len }
 
 -- | Allocate a list of capnproto @Void@ values.
-allocList0   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('ListData 'Sz0))
+allocList0   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('R.ListData 'R.Sz0))
 
 -- | Allocate a list of booleans
-allocList1   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('ListData 'Sz1))
+allocList1   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('R.ListData 'R.Sz1))
 
 -- | Allocate a list of 8-bit values.
-allocList8   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('ListData 'Sz8))
+allocList8   :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('R.ListData 'R.Sz8))
 
 -- | Allocate a list of 16-bit values.
-allocList16  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('ListData 'Sz16))
+allocList16  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('R.ListData 'R.Sz16))
 
 -- | Allocate a list of 32-bit values.
-allocList32  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('ListData 'Sz32))
+allocList32  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('R.ListData 'R.Sz32))
 
 -- | Allocate a list of 64-bit words.
-allocList64  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('ListData 'Sz64))
+allocList64  :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) ('R.ListData 'R.Sz64))
 
 -- | Allocate a list of pointers.
-allocListPtr :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) 'ListPtr)
+allocListPtr :: M.WriteCtx m s => M.Message ('Mut s) -> Int -> m (RawNormalList ('Mut s) 'R.ListPtr)
 
 allocList0   = allocNormalList 0
 allocList1   = allocNormalList 1
@@ -870,28 +870,28 @@ copyList dest src = case src of
             dest
             (fromIntegral $ structListWordCount src)
             (structListPtrCount src)
-            (length @'ListComposite src)
-        copyListOf @'ListComposite destList src
+            (length @'R.ListComposite src)
+        copyListOf @'R.ListComposite destList src
         pure destList
     RawAnyList'Normal src -> RawAnyList'Normal <$> case src of
         RawAnyNormalList'Data src ->
             RawAnyNormalList'Data <$> case src of
                 RawAnyDataList D0 src ->
-                    RawAnyDataList D0 <$> allocList0 dest (length @(DL 'Sz0) src)
+                    RawAnyDataList D0 <$> allocList0 dest (length @(DL 'R.Sz0) src)
                 RawAnyDataList D1 src ->
-                    RawAnyDataList D1 <$> allocList1 dest (length @(DL 'Sz1) src)
+                    RawAnyDataList D1 <$> allocList1 dest (length @(DL 'R.Sz1) src)
                 RawAnyDataList D8 src ->
-                    RawAnyDataList D8 <$> allocList8 dest (length @(DL 'Sz8) src)
+                    RawAnyDataList D8 <$> allocList8 dest (length @(DL 'R.Sz8) src)
                 RawAnyDataList D16 src ->
-                    RawAnyDataList D16 <$> allocList16 dest (length @(DL 'Sz16) src)
+                    RawAnyDataList D16 <$> allocList16 dest (length @(DL 'R.Sz16) src)
                 RawAnyDataList D32 src ->
-                    RawAnyDataList D32 <$> allocList32 dest (length @(DL 'Sz32) src)
+                    RawAnyDataList D32 <$> allocList32 dest (length @(DL 'R.Sz32) src)
                 RawAnyDataList D64 src ->
-                    RawAnyDataList D64 <$> allocList64 dest (length @(DL 'Sz64) src)
+                    RawAnyDataList D64 <$> allocList64 dest (length @(DL 'R.Sz64) src)
         RawAnyNormalList'Ptr src ->
-            RawAnyNormalList'Ptr <$> copyNewListOf @('ListNormal 'ListPtr) dest src allocListPtr
+            RawAnyNormalList'Ptr <$> copyNewListOf @('R.ListNormal 'R.ListPtr) dest src allocListPtr
 
-type DL r = 'ListNormal ('ListData r)
+type DL r = 'R.ListNormal ('R.ListData r)
 
 copyNewListOf
     :: forall r m s. (RWCtx m s, List r)
@@ -921,11 +921,11 @@ copyStruct dest src = do
     -- TODO: possible enhancement: allow the destination section to be
     -- smaller than the source section if and only if the tail of the
     -- source section is all zeros (default values).
-    copySection @('ListNormal ('ListData 'Sz64))
+    copySection @('R.ListNormal ('R.ListData 'R.Sz64))
         (dataSection dest)
         (dataSection src)
         0
-    copySection @('ListNormal 'ListPtr)
+    copySection @('R.ListNormal 'R.ListPtr)
         (ptrSection  dest)
         (ptrSection  src)
         (Nothing @(RawAnyPointer ('Mut s)))
