@@ -180,6 +180,10 @@ library
       , Internal.Gen.Instances
       , Internal.BuildPure
       , Codec.Capnp
+
+      -- Not ready for prime time, but someday these will be part
+      -- of the public API:
+      , Capnp.Fields
     -- other-extensions:
     build-depends:
         cpu                               ^>= 0.1.2

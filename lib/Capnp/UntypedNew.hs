@@ -26,12 +26,7 @@ Each of the data types exported by this module is parametrized over the message'
 mutability (see "Capnp.Message").
 -}
 module Capnp.UntypedNew
-    ( HasField
-    , Field(..)
-    , FieldLoc(..)
-    , DataFieldLoc(..)
-
-    , Ptr(..), List, Struct, Cap
+    ( Ptr(..), List, Struct, Cap
 
     , getData, getPtr
     , setData, setPtr
@@ -72,11 +67,9 @@ import Data.Word
 
 import qualified Data.ByteString as BS
 
-import Control.Monad.Catch  (MonadThrow(throwM))
-import Data.Foldable        (for_)
-import Data.Kind            (Type)
-import Data.Proxy           (Proxy)
-import GHC.OverloadedLabels (IsLabel)
+import Control.Monad.Catch (MonadThrow(throwM))
+import Data.Foldable       (for_)
+import Data.Kind           (Type)
 
 import           Capnp.Address
     (OffsetError (..), WordAddr (..), pointerFrom)
@@ -126,33 +119,6 @@ instance DataSizeBits 'R.Sz8 where szBits = 8
 instance DataSizeBits 'R.Sz16 where szBits = 16
 instance DataSizeBits 'R.Sz32 where szBits = 32
 instance DataSizeBits 'R.Sz64 where szBits = 64
-
--------------------------------------------------------------------------------
--- Fields. TODO: this probably belongs elsewhere.
--------------------------------------------------------------------------------
-
-data FieldLoc (r :: R.Repr) where
-    GroupField :: FieldLoc ('R.Ptr ('Just 'R.Struct))
-    UnionField :: Word16 -> FieldLoc ('R.Ptr ('Just 'R.Struct))
-    PtrField :: Word16 -> FieldLoc ('R.Ptr a)
-    DataField :: DataFieldLoc a -> FieldLoc ('R.Data a)
-
-data DataFieldLoc (sz :: R.DataSz) = DataFieldLoc
-    { offset       :: Int
-    , size         :: Proxy sz
-    , defaultValue :: Word64
-    }
-
-data Field a b where
-    Field :: R.HasRepr b r => FieldLoc r -> Field a b
-
-class
-    ( R.HasRepr a ('R.Ptr ('Just 'R.Struct))
-    , IsLabel name (Field a b)
-    ) => HasField name a b | a name -> b
-
-----
-
 
 -------------------------------------------------------------------------------
 -- Raw* type families
